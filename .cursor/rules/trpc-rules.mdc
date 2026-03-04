@@ -1,0 +1,10 @@
+---
+description: tRPC contract and routing rules
+---
+# tRPC Rules
+
+- All routes defined in packages/trpc
+- Validate all input with Zod
+- Use protectedProcedure for authenticated routes
+- Routers delegate to NestJS services
+- Never perform direct DB queries in routers

@@ -1,0 +1,16 @@
+---
+description: Stripe billing and subscription standards
+---
+# Stripe Billing Rules
+
+- Stripe logic backend only
+- Verify all webhook signatures
+- Sync subscription state to database
+- Subscription status source of truth: database
+
+Handle events:
+- customer.subscription.created
+- customer.subscription.updated
+- customer.subscription.deleted
+
+Never trust client-side subscription state.

@@ -1,0 +1,10 @@
+---
+globs: *.tsx
+---
+# Tailwind + Frontend Rules
+
+- Tailwind CSS v4 utility-first only
+- No inline styles
+- Extract reusable components after 3 repetitions
+- Maintain consistent spacing scale
+- Design must be dark-mode ready

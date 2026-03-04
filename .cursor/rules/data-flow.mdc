@@ -1,0 +1,248 @@
+---
+alwaysApply: true
+---
+# Data Flow Rules — Server Components & Server Actions
+
+## Core Principles
+1. **Reads** = Server Components (RSC) only
+2. **Writes** (insert / update / delete) = Server Actions only
+3. **Validation** = Zod schemas with TypeScript types — never raw FormData
+
+---
+
+## Data Retrieval — Server Components Only
+
+All data fetching MUST happen in React Server Components. Never fetch data in client components.
+
+```tsx
+// CORRECT — fetch data in a server component
+// app/decks/page.tsx (Server Component — no 'use client')
+import { db } from '@/db'
+import { decks } from '@/db/schema'
+import { eq, isNull } from 'drizzle-orm'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+export default async function DecksPage() {
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.getClaims()
+  if (error || !data?.claims) redirect('/auth/login')
+
+  const userId = data.claims.sub
+  const userDecks = await db.select({
+    id: decks.id,
+    title: decks.title,
+    description: decks.description,
+  }).from(decks).where(
+    and(eq(decks.userId, userId), isNull(decks.deletedAt))
+  )
+
+  return <DeckList decks={userDecks} />
+}
+```
+
+```tsx
+// WRONG — fetching data in a client component
+'use client'
+import { useEffect, useState } from 'react'
+
+export function DeckList() {
+  const [decks, setDecks] = useState([])
+  useEffect(() => {
+    fetch('/api/decks').then(res => res.json()).then(setDecks) // NEVER do this
+  }, [])
+}
+```
+
+### Rules
+- No `fetch()` in client components for data retrieval
+- No `useEffect` for loading data — use server components instead
+- Pass fetched data as props to client components that need interactivity
+- Use `React.cache()` to deduplicate repeated queries within a single request
+
+---
+
+## Mutations — Server Actions Only
+
+All inserts, updates, and deletes MUST use server actions (`'use server'`).
+
+### Server Action File Structure
+Place server actions in colocated `actions.ts` files or in `src/app/_actions/`.
+
+```ts
+// CORRECT — server action with Zod validation and typed input
+'use server'
+
+import { z } from 'zod'
+import { db } from '@/db'
+import { decks } from '@/db/schema'
+import { eq, and } from 'drizzle-orm'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
+
+const createDeckSchema = z.object({
+  title: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+})
+
+type CreateDeckInput = z.infer<typeof createDeckSchema>
+
+export async function createDeck(input: CreateDeckInput) {
+  const validated = createDeckSchema.parse(input)
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.getClaims()
+  if (error || !data?.claims) redirect('/auth/login')
+
+  const userId = data.claims.sub
+
+  const [newDeck] = await db.insert(decks).values({
+    userId,
+    title: validated.title,
+    description: validated.description ?? null,
+  }).returning({ id: decks.id, title: decks.title })
+
+  revalidatePath('/decks')
+  return newDeck
+}
+```
+
+```tsx
+// CORRECT — calling the server action from a client component
+'use client'
+
+import { createDeck } from './actions'
+
+export function CreateDeckForm() {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const title = titleRef.current?.value ?? ''
+    const description = descRef.current?.value ?? ''
+
+    // Pass a typed object — NOT FormData
+    await createDeck({ title, description })
+  }
+
+  return <form onSubmit={handleSubmit}>...</form>
+}
+```
+
+---
+
+## Zod Validation — Mandatory for All Server Actions
+
+### Every server action MUST:
+1. Define a Zod schema for its input
+2. Derive a TypeScript type from the schema using `z.infer<typeof schema>`
+3. Use that type as the function parameter — never `FormData`
+4. Call `.parse()` or `.safeParse()` on the input before any DB operation
+
+```ts
+// CORRECT — Zod schema + inferred type
+const updateCardSchema = z.object({
+  cardId: z.string().uuid(),
+  front: z.string().min(1).max(500),
+  back: z.string().min(1).max(500),
+})
+
+type UpdateCardInput = z.infer<typeof updateCardSchema>
+
+export async function updateCard(input: UpdateCardInput) {
+  const validated = updateCardSchema.parse(input)
+  // ... perform update
+}
+```
+
+```ts
+// WRONG — using FormData as the type
+export async function updateCard(formData: FormData) {
+  const front = formData.get('front') as string // NEVER do this
+  const back = formData.get('back') as string
+}
+
+// WRONG — no Zod validation
+export async function updateCard(input: { front: string; back: string }) {
+  await db.update(cards).set({ front: input.front }) // Unvalidated input
+}
+
+// WRONG — inline type instead of Zod-inferred
+type UpdateCardInput = { front: string; back: string }
+export async function updateCard(input: UpdateCardInput) { ... }
+```
+
+---
+
+## Client Component Pattern for Forms
+
+When a client component needs to call a server action, extract form values into a typed object before calling.
+
+```tsx
+'use client'
+
+import { updateDeck } from './actions'
+import { useState } from 'react'
+
+// Props come from a server component parent
+interface EditDeckFormProps {
+  deckId: string
+  initialTitle: string
+  initialDescription: string
+}
+
+export function EditDeckForm({ deckId, initialTitle, initialDescription }: EditDeckFormProps) {
+  const [title, setTitle] = useState(initialTitle)
+  const [description, setDescription] = useState(initialDescription)
+
+  async function handleSave() {
+    // Pass a typed object — never FormData
+    await updateDeck({ deckId, title, description })
+  }
+
+  return (
+    <div>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} />
+      <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+      <button onClick={handleSave}>Save</button>
+    </div>
+  )
+}
+```
+
+---
+
+## Error Handling in Server Actions
+
+Use `.safeParse()` when you need to return validation errors to the client.
+
+```ts
+'use server'
+
+import { z } from 'zod'
+
+const schema = z.object({
+  title: z.string().min(1, 'Title is required').max(100),
+})
+
+type ActionResult = { success: true; id: string } | { success: false; error: string }
+
+export async function createDeck(input: z.infer<typeof schema>): Promise<ActionResult> {
+  const result = schema.safeParse(input)
+  if (!result.success) {
+    return { success: false, error: result.error.issues[0].message }
+  }
+  // ... insert and return { success: true, id: newDeck.id }
+}
+```
+
+---
+
+## Forbidden Practices
+- No `fetch()` or `axios` in components for data retrieval
+- No `useEffect` data loading patterns
+- No `FormData` as a server action parameter type
+- No server actions without Zod validation
+- No manually written TypeScript types for server action inputs — always derive from Zod with `z.infer`
+- No database queries in client components
+- No mutations outside of server actions (no inline `db.insert` in server components)
+- No `'use server'` functions that accept unvalidated `unknown` or `any` inputs

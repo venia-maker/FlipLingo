@@ -1,0 +1,13 @@
+---
+globs: *.ts,*.tsx
+---
+# TypeScript Standards
+
+- Strict mode enabled
+- No `any` types allowed
+- Use Zod for all validation
+- Infer types from tRPC procedures
+- Prefer early returns
+- Maximum 300 lines per file
+
+Never manually duplicate API response types.

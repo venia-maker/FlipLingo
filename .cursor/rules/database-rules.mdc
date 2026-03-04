@@ -1,0 +1,130 @@
+---
+alwaysApply: true
+---
+# Database Rules — Drizzle ORM + Supabase
+
+## Core Principle
+ALL database interactions MUST use the Drizzle schema and Drizzle query/mutation APIs.
+No exceptions.
+
+## Schema Location
+- All table definitions live in `src/db/schema/` as Drizzle `pgTable` calls
+- Barrel export: `src/db/schema/index.ts` — always import schema from here
+- DB client: `src/db/index.ts` — exports the `db` instance with all schema loaded
+
+### Current Tables
+- `decks` — `src/db/schema/decks.ts` (columns: id, userId, title, description, createdAt, updatedAt, deletedAt)
+- `cards` — `src/db/schema/cards.ts` (columns: id, deckId, front, back, position, createdAt, updatedAt, deletedAt)
+
+## Mandatory Patterns
+
+### Always use Drizzle typed queries
+```ts
+// CORRECT — use db with schema imports
+import { db } from '@/db'
+import { decks, cards } from '@/db/schema'
+import { eq, and, isNull } from 'drizzle-orm'
+
+const result = await db.select({
+  id: decks.id,
+  title: decks.title,
+}).from(decks).where(and(eq(decks.userId, userId), isNull(decks.deletedAt)))
+```
+
+### Never use raw SQL
+```ts
+// WRONG — never do this
+await db.execute(sql`SELECT * FROM decks WHERE user_id = ${userId}`)
+// WRONG — never use postgres client directly
+await client.query('SELECT * FROM decks')
+// WRONG — never use Supabase client for data queries
+const { data } = await supabase.from('decks').select('*')
+```
+
+### Never use `SELECT *` — always select explicit columns
+```ts
+// WRONG
+await db.select().from(decks)
+
+// CORRECT
+await db.select({ id: decks.id, title: decks.title, description: decks.description }).from(decks)
+```
+
+### Use inferred types from schema — never duplicate
+```ts
+// CORRECT — use Drizzle inferred types
+import { type Deck, type NewDeck } from '@/db/schema/decks'
+import { type Card, type NewCard } from '@/db/schema/cards'
+
+// WRONG — never manually redefine table shapes
+interface Deck { id: string; title: string; ... }
+```
+
+## Schema Standards
+
+### Primary Keys
+- All tables use `uuid('id').defaultRandom().primaryKey()`
+
+### Timestamps
+- `createdAt: timestamp('created_at').defaultNow().notNull()`
+- `updatedAt: timestamp('updated_at').defaultNow().notNull()`
+- Always set `updatedAt` to `new Date()` on mutations
+
+### Soft Deletes
+- `deletedAt: timestamp('deleted_at')` — nullable
+- Never hard-delete user data
+- Always filter with `isNull(table.deletedAt)` on reads
+- Soft delete = `await db.update(table).set({ deletedAt: new Date() }).where(eq(table.id, id))`
+
+### Foreign Keys
+- Define with `.references(() => parentTable.id, { onDelete: 'cascade' })` where appropriate
+- Add indexes on all foreign key columns
+
+### Relations
+- Define with `relations()` from `drizzle-orm` in the same schema file as the table
+- Export relations alongside the table definition
+
+## Insert / Update / Delete Patterns
+
+### Insert
+```ts
+const [newDeck] = await db.insert(decks).values({
+  userId,
+  title: 'My Deck',
+  description: 'A new deck',
+}).returning({ id: decks.id, title: decks.title })
+```
+
+### Update
+```ts
+await db.update(decks).set({
+  title: 'Updated Title',
+  updatedAt: new Date(),
+}).where(eq(decks.id, deckId))
+```
+
+### Soft Delete
+```ts
+await db.update(decks).set({
+  deletedAt: new Date(),
+  updatedAt: new Date(),
+}).where(eq(decks.id, deckId))
+```
+
+## Adding New Tables
+
+1. Create a new file in `src/db/schema/` (e.g., `progress.ts`)
+2. Define the table with `pgTable`, relations, and export inferred types
+3. Re-export from `src/db/schema/index.ts`
+4. Run `npx drizzle-kit generate` to create the migration
+5. Run `npx drizzle-kit migrate` to apply it
+
+## Forbidden Practices
+- ❌ No raw SQL strings or `sql` template tags for CRUD operations
+- ❌ No `SELECT *` — always specify columns
+- ❌ No Supabase JS client (`supabase.from(...)`) for data reads/writes — use Drizzle
+- ❌ No manual type definitions that mirror table shapes — use `$inferSelect` / `$inferInsert`
+- ❌ No `any` in query results
+- ❌ No hard deletes on user data
+- ❌ No database queries in React components — queries belong in server actions or API routes
+- ❌ No storing Stripe secret keys or sensitive tokens in the database without encryption

@@ -1,0 +1,27 @@
+---
+alwaysApply: true
+---
+# FlipLingo Architecture Guide
+
+FlipLingo is a monorepo with the following structure:
+
+- apps/web (Next.js App Router frontend)
+- apps/api (NestJS backend)
+- packages/db (Drizzle schema + migrations)
+- packages/trpc (tRPC routers + shared types)
+
+Backend layering rule:
+Controller → Service → Repository → Database
+
+- No business logic in controllers
+- No database access in controllers
+- Stripe logic only inside services
+- Repositories handle Drizzle queries only
+
+Frontend rules:
+- Prefer React Server Components
+- Client components only when interaction is required
+- All data fetching via tRPC
+
+Never duplicate types. Types must flow:
+Drizzle → tRPC → Frontend

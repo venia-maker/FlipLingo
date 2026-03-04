@@ -1,0 +1,144 @@
+---
+alwaysApply: true
+---
+# Supabase Auth & Data Ownership Rules
+
+## Core Principle
+ALL authentication is handled by Supabase. Users must ONLY access their own data — never another user's. Every data operation MUST be scoped to the authenticated user.
+
+## Authentication Architecture
+
+### Session Flow
+```
+Request → Middleware (updateSession) → supabase.auth.getClaims() → JWT claims → userId
+```
+- Sessions are JWT-based, stored in HTTP-only cookies via `@supabase/ssr`
+- Middleware refreshes the session on every request
+- `getClaims()` is the canonical way to get the current user — never use `getUser()` for performance
+
+### Supabase Client Factories
+- **Browser**: `src/lib/supabase/client.ts` → `createClient()` (client components only)
+- **Server**: `src/lib/supabase/server.ts` → `createClient()` (RSC, server actions, route handlers)
+- Never instantiate Supabase clients manually — always use these factories
+
+## Data Ownership Enforcement
+
+### Every query MUST filter by userId
+```ts
+// CORRECT — always scope to the authenticated user
+const userDecks = await db.select({
+  id: decks.id,
+  title: decks.title,
+}).from(decks).where(
+  and(eq(decks.userId, userId), isNull(decks.deletedAt))
+)
+
+// WRONG — fetches all users' data
+const allDecks = await db.select({ id: decks.id }).from(decks)
+
+// WRONG — fetches by ID without verifying ownership
+const deck = await db.select().from(decks).where(eq(decks.id, deckId))
+```
+
+### Ownership check on single-resource access
+```ts
+// CORRECT — always verify the resource belongs to the user
+const [deck] = await db.select({
+  id: decks.id,
+  title: decks.title,
+}).from(decks).where(
+  and(
+    eq(decks.id, deckId),
+    eq(decks.userId, userId),
+    isNull(decks.deletedAt),
+  )
+)
+
+if (!deck) {
+  throw new Error('Deck not found') // Never reveal "not yours" vs "doesn't exist"
+}
+```
+
+### Child resources must verify parent ownership
+```ts
+// CORRECT — join to parent table to verify user owns the deck before accessing cards
+const deckCards = await db.select({
+  id: cards.id,
+  front: cards.front,
+  back: cards.back,
+}).from(cards)
+  .innerJoin(decks, eq(cards.deckId, decks.id))
+  .where(
+    and(
+      eq(cards.deckId, deckId),
+      eq(decks.userId, userId),
+      isNull(cards.deletedAt),
+    )
+  )
+
+// WRONG — no ownership check, any user can read any deck's cards
+const deckCards = await db.select().from(cards).where(eq(cards.deckId, deckId))
+```
+
+### Mutations must verify ownership BEFORE modifying
+```ts
+// CORRECT — update only if user owns the resource
+const result = await db.update(decks).set({
+  title: newTitle,
+  updatedAt: new Date(),
+}).where(
+  and(eq(decks.id, deckId), eq(decks.userId, userId))
+).returning({ id: decks.id })
+
+if (result.length === 0) {
+  throw new Error('Deck not found')
+}
+
+// WRONG — updates without ownership check
+await db.update(decks).set({ title: newTitle }).where(eq(decks.id, deckId))
+```
+
+## Getting the Authenticated User
+
+### In Server Components / Server Actions
+```ts
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+const supabase = await createClient()
+const { data, error } = await supabase.auth.getClaims()
+
+if (error || !data?.claims) {
+  redirect('/auth/login')
+}
+
+const userId = data.claims.sub // This is the user's UUID
+```
+
+### In Client Components
+```ts
+import { createClient } from '@/lib/supabase/client'
+
+const supabase = createClient()
+const { data: { user } } = await supabase.auth.getUser()
+```
+
+### In tRPC Context (when implemented)
+```ts
+// Context must resolve userId and pass it through — procedures never call Supabase directly
+const userId = ctx.user.id // Set during context creation from JWT
+```
+
+## Error Handling
+- Never distinguish between "not found" and "not authorized" in error messages — always return generic "not found"
+- This prevents user enumeration and data leakage
+- Log authorization failures server-side for monitoring
+
+## Forbidden Practices
+- Never fetch data without filtering by `userId` (or joining to a user-owned parent)
+- Never trust client-supplied `userId` — always derive it from the Supabase session server-side
+- Never expose another user's data in error messages or responses
+- Never use the Supabase service role key in client-accessible code
+- Never skip ownership checks for "admin" features unless a proper admin role system exists
+- Never pass `userId` from the frontend as a query parameter — always extract from session
+- Never use `supabase.auth.getSession()` for auth validation — it reads from cookies without verification; use `getClaims()` or `getUser()` instead
