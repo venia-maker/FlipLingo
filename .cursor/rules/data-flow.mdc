@@ -7,35 +7,138 @@ alwaysApply: true
 1. **Reads** = Server Components (RSC) only
 2. **Writes** (insert / update / delete) = Server Actions only
 3. **Validation** = Zod schemas with TypeScript types — never raw FormData
+4. **All DB access** = through helper functions in `src/db/queries/` — never inline queries
 
 ---
 
-## Data Retrieval — Server Components Only
+## Database Query Layer — `src/db/queries/`
 
-All data fetching MUST happen in React Server Components. Never fetch data in client components.
+All database reads and writes MUST be defined as helper functions in `src/db/queries/`. No server component or server action should import `db` directly or write inline Drizzle queries.
 
-```tsx
-// CORRECT — fetch data in a server component
-// app/decks/page.tsx (Server Component — no 'use client')
+### File Structure
+```
+src/db/queries/
+  decks.ts        # All deck-related queries and mutations
+  cards.ts        # All card-related queries and mutations
+  progress.ts     # All progress-related queries and mutations
+  users.ts        # All user-related queries and mutations
+  subscriptions.ts
+```
+
+One file per domain entity. Each file exports named functions for every query and mutation.
+
+### Query Helper Rules
+- Each function performs a single, focused DB operation
+- Functions accept explicit parameters — never raw request objects
+- Functions return typed results using Drizzle's inferred types
+- No `SELECT *` — always select explicit columns
+- Functions handle their own `isNull(table.deletedAt)` soft-delete filtering
+- Use `React.cache()` wrappers for queries called in server components to deduplicate within a request
+
+```ts
+// CORRECT — src/db/queries/decks.ts
+import { cache } from 'react'
 import { db } from '@/db'
 import { decks } from '@/db/schema'
-import { eq, isNull } from 'drizzle-orm'
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { eq, and, isNull } from 'drizzle-orm'
 
-export default async function DecksPage() {
-  const supabase = await createClient()
-  const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims) redirect('/auth/login')
-
-  const userId = data.claims.sub
-  const userDecks = await db.select({
+export const getDecksByUserId = cache(async (userId: string) => {
+  return db.select({
     id: decks.id,
     title: decks.title,
     description: decks.description,
   }).from(decks).where(
     and(eq(decks.userId, userId), isNull(decks.deletedAt))
   )
+})
+
+export const getDeckById = cache(async (deckId: string, userId: string) => {
+  const [deck] = await db.select({
+    id: decks.id,
+    title: decks.title,
+    description: decks.description,
+    userId: decks.userId
+  }).from(decks).where(
+    and(
+      eq(decks.id, deckId),
+      eq(decks.userId, userId),
+      isNull(decks.deletedAt),
+    )
+  )
+  return deck ?? null
+})
+
+export async function insertDeck(values: {
+  userId: string
+  title: string
+  description: string | null
+}) {
+  const [newDeck] = await db.insert(decks).values(values).returning({
+    id: decks.id,
+    title: decks.title,
+  })
+  return newDeck
+}
+
+export async function updateDeckById(
+  deckId: string,
+  userId: string,
+  values: { title?: string; description?: string | null },
+) {
+  const [updated] = await db.update(decks)
+    .set({ ...values, updatedAt: new Date() })
+    .where(
+      and(eq(decks.id, deckId), eq(decks.userId, userId), isNull(decks.deletedAt))
+    )
+    .returning({ id: decks.id, title: decks.title })
+  return updated ?? null
+}
+
+export async function softDeleteDeck(deckId: string, userId: string) {
+  const [deleted] = await db.update(decks)
+    .set({ deletedAt: new Date() })
+    .where(
+      and(eq(decks.id, deckId), eq(decks.userId, userId), isNull(decks.deletedAt))
+    )
+    .returning({ id: decks.id })
+  return deleted ?? null
+}
+```
+
+```ts
+// WRONG — inline DB query in a server component
+export default async function DecksPage() {
+  const userDecks = await db.select({ ... }).from(decks).where(...) // NEVER do this
+}
+
+// WRONG — inline DB query in a server action
+export async function createDeck(input: CreateDeckInput) {
+  const [newDeck] = await db.insert(decks).values({ ... }) // NEVER do this
+}
+
+// WRONG — importing db directly in a server component or action
+import { db } from '@/db' // Only db/queries files should import db
+```
+
+---
+
+## Data Retrieval — Server Components Only
+
+All data fetching MUST happen in React Server Components by calling query helpers from `src/db/queries/`. Never fetch data in client components.
+
+```tsx
+// CORRECT — server component calls a query helper
+// app/decks/page.tsx (Server Component — no 'use client')
+import { getDecksByUserId } from '@/db/queries/decks'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+export default async function DecksPage() {
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data?.user) redirect('/auth/login')
+
+  const userDecks = await getDecksByUserId(data.user.id)
 
   return <DeckList decks={userDecks} />
 }
@@ -58,25 +161,24 @@ export function DeckList() {
 - No `fetch()` in client components for data retrieval
 - No `useEffect` for loading data — use server components instead
 - Pass fetched data as props to client components that need interactivity
-- Use `React.cache()` to deduplicate repeated queries within a single request
+- Query helpers use `React.cache()` to deduplicate repeated queries within a single request
+- Server components import from `@/db/queries/` — never from `@/db` directly
 
 ---
 
 ## Mutations — Server Actions Only
 
-All inserts, updates, and deletes MUST use server actions (`'use server'`).
+All inserts, updates, and deletes MUST use server actions (`'use server'`) that call mutation helpers from `src/db/queries/`.
 
 ### Server Action File Structure
 Place server actions in colocated `actions.ts` files or in `src/app/_actions/`.
 
 ```ts
-// CORRECT — server action with Zod validation and typed input
+// CORRECT — server action calls a mutation helper
 'use server'
 
 import { z } from 'zod'
-import { db } from '@/db'
-import { decks } from '@/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { insertDeck } from '@/db/queries/decks'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -92,16 +194,14 @@ export async function createDeck(input: CreateDeckInput) {
   const validated = createDeckSchema.parse(input)
 
   const supabase = await createClient()
-  const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims) redirect('/auth/login')
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data?.user) redirect('/auth/login')
 
-  const userId = data.claims.sub
-
-  const [newDeck] = await db.insert(decks).values({
-    userId,
+  const newDeck = await insertDeck({
+    userId: data.user.id,
     title: validated.title,
     description: validated.description ?? null,
-  }).returning({ id: decks.id, title: decks.title })
+  })
 
   revalidatePath('/decks')
   return newDeck
@@ -150,7 +250,7 @@ type UpdateCardInput = z.infer<typeof updateCardSchema>
 
 export async function updateCard(input: UpdateCardInput) {
   const validated = updateCardSchema.parse(input)
-  // ... perform update
+  // ... call mutation helper from db/queries
 }
 ```
 
@@ -219,6 +319,7 @@ Use `.safeParse()` when you need to return validation errors to the client.
 'use server'
 
 import { z } from 'zod'
+import { insertDeck } from '@/db/queries/decks'
 
 const schema = z.object({
   title: z.string().min(1, 'Title is required').max(100),
@@ -231,7 +332,7 @@ export async function createDeck(input: z.infer<typeof schema>): Promise<ActionR
   if (!result.success) {
     return { success: false, error: result.error.issues[0].message }
   }
-  // ... insert and return { success: true, id: newDeck.id }
+  // ... call insertDeck() and return { success: true, id: newDeck.id }
 }
 ```
 
@@ -246,3 +347,5 @@ export async function createDeck(input: z.infer<typeof schema>): Promise<ActionR
 - No database queries in client components
 - No mutations outside of server actions (no inline `db.insert` in server components)
 - No `'use server'` functions that accept unvalidated `unknown` or `any` inputs
+- **No inline Drizzle queries in server components or server actions — all DB access goes through `src/db/queries/`**
+- **No importing `db` from `@/db` in server components or server actions — only `src/db/queries/` files import `db`**
