@@ -1,7 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { LogOut, User } from 'lucide-react'
+import { useTheme } from 'next-themes'
+import { LogOut, Moon, Sun, User } from 'lucide-react'
 
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ interface UserDropdownProps {
 
 export function UserDropdown({ email }: UserDropdownProps) {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -39,6 +41,11 @@ export function UserDropdown({ email }: UserDropdownProps) {
         <DropdownMenuLabel className="font-normal">
           <p className="truncate text-sm text-muted-foreground">{email}</p>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          {theme === 'dark' ? <Sun /> : <Moon />}
+          {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOut />
