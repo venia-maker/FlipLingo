@@ -6,8 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getDeckById } from '@/db/queries/decks'
 import { getCardsByDeckId } from '@/db/queries/cards'
 import { Header } from '@/components/features/header'
-import { Button } from '@/components/ui/button'
 import { StudySession } from '@/components/features/decks/study-session'
+import { Button } from '@/components/ui/button'
 
 interface StudyPageProps {
   params: Promise<{ id: string }>
@@ -37,14 +37,10 @@ export default async function StudyPage({ params }: StudyPageProps) {
         <Link href={`/deck/${id}`}>
           <Button variant="ghost" size="sm" className="mb-6">
             <ArrowLeft className="size-4" />
-            Back to Deck
+            Back to {deck.title}
           </Button>
         </Link>
-        <StudySession
-          deckId={id}
-          deckTitle={deck.title}
-          cards={cards.map((c) => ({ id: c.id, front: c.front, back: c.back }))}
-        />
+        <StudySession deckId={id} deckTitle={deck.title} cards={cards} />
       </main>
     </div>
   )

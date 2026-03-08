@@ -1,15 +1,16 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Play } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 
 import { createClient } from '@/lib/supabase/server'
-import { getDeckById } from '@/db/queries/decks'
+import { getDeckById, getDecksByUserId } from '@/db/queries/decks'
 import { getCardsByDeckId } from '@/db/queries/cards'
+import { getUserSubscriptionStatus } from '@/app/actions/stripe'
 import { Header } from '@/components/features/header'
 import { CardList } from '@/components/features/decks/card-list'
 import { DeckActions } from '@/components/features/decks/deck-actions'
 import { AddCardDialog } from '@/components/features/decks/add-card-dialog'
-import { StudyProgressBadge } from '@/components/features/decks/study-progress-badge'
+import { StudyButton } from '@/components/features/decks/study-button'
 import { Button } from '@/components/ui/button'
 
 const difficultyColors: Record<string, string> = {
@@ -32,8 +33,20 @@ export default async function DeckPage({ params }: DeckPageProps) {
   const email = typeof data.claims.email === 'string' ? data.claims.email : ''
   const userId = data.claims.sub as string
 
-  const deck = await getDeckById(id, userId)
+  const [deck, { isPro }] = await Promise.all([
+    getDeckById(id, userId),
+    getUserSubscriptionStatus(email, userId),
+  ])
   if (!deck) redirect('/dashboard')
+
+  // Block access to decks beyond the free limit
+  if (!isPro) {
+    const allDecks = await getDecksByUserId(userId)
+    const allowedIds = new Set(allDecks.slice(0, 3).map((d) => d.id))
+    if (!allowedIds.has(id)) {
+      redirect('/dashboard')
+    }
+  }
 
   const cards = await getCardsByDeckId(id)
 
@@ -74,17 +87,7 @@ export default async function DeckPage({ params }: DeckPageProps) {
             {cards.length} card{cards.length === 1 ? '' : 's'}
           </p>
           <div className="flex items-center gap-2">
-            {cards.length > 0 && (
-              <>
-                <StudyProgressBadge deckId={id} />
-                <Link href={`/deck/${id}/study`}>
-                  <Button size="sm" variant="default">
-                    <Play className="size-4" />
-                    Start Learning
-                  </Button>
-                </Link>
-              </>
-            )}
+            <StudyButton deckId={id} cardCount={cards.length} />
             <AddCardDialog deckId={id} />
           </div>
         </div>

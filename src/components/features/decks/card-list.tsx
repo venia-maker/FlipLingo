@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useId } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -34,6 +34,7 @@ interface CardListProps {
 }
 
 export function CardList({ deckId, initialCards }: CardListProps) {
+  const dndId = useId()
   const [cards, setCards] = useState(initialCards)
 
   useEffect(() => {
@@ -71,6 +72,12 @@ export function CardList({ deckId, initialCards }: CardListProps) {
     setCards((prev) => prev.filter((c) => c.id !== cardId))
   }, [])
 
+  const handleCardUpdated = useCallback((cardId: string, front: string, back: string) => {
+    setCards((prev) =>
+      prev.map((c) => (c.id === cardId ? { ...c, front, back } : c)),
+    )
+  }, [])
+
   if (cards.length === 0) {
     return (
       <p className="text-center text-zinc-500 dark:text-zinc-400">
@@ -80,11 +87,11 @@ export function CardList({ deckId, initialCards }: CardListProps) {
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext id={dndId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-3">
           {cards.map((card) => (
-            <SortableCard key={card.id} card={card} onDeleted={handleCardDeleted} />
+            <SortableCard key={card.id} card={card} onDeleted={handleCardDeleted} onUpdated={handleCardUpdated} />
           ))}
         </div>
       </SortableContext>

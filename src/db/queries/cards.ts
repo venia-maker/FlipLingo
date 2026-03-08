@@ -78,3 +78,14 @@ export async function softDeleteCard(cardId: string) {
     .returning({ id: cards.id })
   return deleted ?? null
 }
+
+export async function hardDeleteCard(cardId: string) {
+  const [deleted] = await db.delete(cards)
+    .where(eq(cards.id, cardId))
+    .returning({ id: cards.id })
+  return deleted ?? null
+}
+
+export async function hardDeleteCardsByDeckId(deckId: string) {
+  await db.delete(cards).where(eq(cards.deckId, deckId))
+}

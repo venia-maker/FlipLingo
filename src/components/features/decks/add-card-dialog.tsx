@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 
@@ -24,11 +24,14 @@ interface AddCardDialogProps {
 
 export function AddCardDialog({ deckId }: AddCardDialogProps) {
   const [open, setOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
-  async function handleSubmit(formData: FormData) {
-    await addCardAction(deckId, formData)
-    setOpen(false)
-    toast.success('Card added successfully')
+  function handleSubmit(formData: FormData) {
+    startTransition(async () => {
+      await addCardAction(deckId, formData)
+      setOpen(false)
+      toast.success('Card added successfully')
+    })
   }
 
   return (
@@ -58,7 +61,9 @@ export function AddCardDialog({ deckId }: AddCardDialogProps) {
             </div>
           </div>
           <DialogFooter className="mt-6">
-            <Button type="submit">Add Card</Button>
+            <Button type="submit" disabled={isPending}>
+            {isPending ? 'Adding…' : 'Add Card'}
+          </Button>
           </DialogFooter>
         </form>
       </DialogContent>

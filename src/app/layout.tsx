@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
+import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -26,16 +27,12 @@ export default function RootLayout({
         <ThemeProvider>
           {children}
           <Toaster
-            position="bottom-right"
+            position="top-right"
             toastOptions={{
-              classNames: {
-                toast: 'bg-background text-foreground border-border shadow-lg',
-                title: 'text-foreground',
-                description: 'text-muted-foreground',
-                success: 'bg-background text-foreground border-border',
-                error: 'bg-background text-destructive border-border',
-                actionButton: 'bg-primary text-primary-foreground',
-                cancelButton: 'bg-muted text-muted-foreground',
+              style: {
+                background: 'var(--color-card)',
+                color: 'var(--color-card-foreground)',
+                border: '1px solid var(--color-border)',
               },
             }}
           />

@@ -1,11 +1,16 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { Lock } from 'lucide-react'
 
 import { Header } from '@/components/features/header'
 import { createClient } from '@/lib/supabase/server'
 import { getDecksByUserId } from '@/db/queries/decks'
+import { Button } from '@/components/ui/button'
 import { DeckCard } from '@/components/features/decks/deck-card'
 import { CreateDeckDialog } from '@/components/features/decks/create-deck-dialog'
+import { getUserSubscriptionStatus } from '@/app/actions/stripe'
+
+const FREE_DECK_LIMIT = 3
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -18,7 +23,12 @@ export default async function DashboardPage() {
   const email = typeof data.claims.email === 'string' ? data.claims.email : ''
   const userId = data.claims.sub as string
 
-  const userDecks = await getDecksByUserId(userId)
+  const [userDecks, { isPro }] = await Promise.all([
+    getDecksByUserId(userId),
+    getUserSubscriptionStatus(email, userId),
+  ])
+
+  const atLimit = !isPro && userDecks.length >= FREE_DECK_LIMIT
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -37,16 +47,61 @@ export default async function DashboardPage() {
                 : 'Create your first deck to get started'}
             </p>
           </div>
-          <CreateDeckDialog />
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                isPro
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                  : 'border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+              }`}>
+                {isPro ? 'Pro plan' : 'Free plan'}
+              </span>
+              {!isPro && (
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  {userDecks.length} / {FREE_DECK_LIMIT} decks used
+                </p>
+              )}
+            </div>
+            {atLimit ? (
+              <Button size="sm" asChild>
+                <Link href="/pricing">Upgrade to Pro</Link>
+              </Button>
+            ) : (
+              <CreateDeckDialog deckCount={userDecks.length} isPro={isPro} />
+            )}
+          </div>
         </div>
 
         {userDecks.length > 0 ? (
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {userDecks.map((deck) => (
-              <Link key={deck.id} href={`/deck/${deck.id}`}>
-                <DeckCard deck={deck} />
-              </Link>
-            ))}
+            {userDecks.map((deck, index) => {
+              const isLocked = !isPro && index >= FREE_DECK_LIMIT
+
+              if (isLocked) {
+                return (
+                  <div key={deck.id} className="relative">
+                    <div className="pointer-events-none opacity-50">
+                      <DeckCard deck={deck} />
+                    </div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-zinc-900/10 backdrop-blur-[2px] dark:bg-zinc-950/40">
+                      <Lock className="mb-2 size-5 text-zinc-600 dark:text-zinc-400" />
+                      <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                        Upgrade to access
+                      </p>
+                      <Button size="sm" variant="outline" className="mt-2" asChild>
+                        <Link href="/pricing">Upgrade</Link>
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <Link key={deck.id} href={`/deck/${deck.id}`}>
+                  <DeckCard deck={deck} />
+                </Link>
+              )
+            })}
           </div>
         ) : (
           <div className="mt-12 text-center text-zinc-500 dark:text-zinc-400">

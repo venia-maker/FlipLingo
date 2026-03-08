@@ -1,16 +1,260 @@
 ---
-description: Stripe billing and subscription standards
+alwaysApply: true
 ---
 # Stripe Billing Rules
 
-- Stripe logic backend only
-- Verify all webhook signatures
-- Sync subscription state to database
-- Subscription status source of truth: database
+## Plans & Price IDs
 
-Handle events:
-- customer.subscription.created
-- customer.subscription.updated
-- customer.subscription.deleted
+| Plan | Price ID | Features |
+|------|----------|----------|
+| Basic (Free/Starter) | `price_1T7xm7Cue7ZGkDuyddzEvT4Y` | `3-deck-limit` |
+| Pro | `price_1T7xrVCue7ZGkDuyOrMTfQK2` | `unlimited-decks`, `ai-flashcard-generation` |
 
-Never trust client-side subscription state.
+Price IDs are stored in environment variables only — never hardcoded in application code:
+```
+STRIPE_PRICE_BASIC=price_1T7xm7Cue7ZGkDuyddzEvT4Y
+STRIPE_PRICE_PRO=price_1T7xrVCue7ZGkDuyOrMTfQK2
+```
+
+## Feature Entitlements
+
+Features are derived from the active price ID on the subscription. Map them in a single place:
+`apps/api/src/modules/subscriptions/entitlements.ts`
+
+```ts
+export const PLAN_FEATURES: Record<string, string[]> = {
+  price_1T7xm7Cue7ZGkDuyddzEvT4Y: ['3-deck-limit'],
+  price_1T7xrVCue7ZGkDuyOrMTfQK2: ['unlimited-decks', 'ai-flashcard-generation'],
+};
+
+export function hasFeature(priceId: string | null, feature: string): boolean {
+  if (!priceId) return false;
+  return PLAN_FEATURES[priceId]?.includes(feature) ?? false;
+}
+```
+
+Never scatter feature checks across the codebase. Always call `hasFeature()` from this single source.
+
+## Database Schema Requirements
+
+The `subscriptions` table (in `packages/db/src/schema/subscriptions.ts`) must contain:
+
+```ts
+export const subscriptions = pgTable('subscriptions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id),
+  stripeCustomerId: text('stripe_customer_id').notNull().unique(),
+  stripeSubscriptionId: text('stripe_subscription_id').unique(),
+  stripePriceId: text('stripe_price_id'),
+  stripeCurrentPeriodEnd: timestamp('stripe_current_period_end'),
+  status: text('status').notNull().default('inactive'), // active | trialing | past_due | canceled | inactive
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').notNull(),
+});
+```
+
+- Never store Stripe customer ID in the `users` table — use this `subscriptions` table.
+- `stripePriceId` is the source of truth for entitlement checks, not the plan name.
+- Always index `userId` and `stripeCustomerId`.
+
+## Backend Architecture (NestJS)
+
+All Stripe logic lives exclusively in `apps/api/src/modules/subscriptions/`.
+
+```
+subscriptions/
+  subscriptions.controller.ts   # HTTP endpoints only, no business logic
+  subscriptions.service.ts      # createCheckoutSession, createPortalSession, getStatus, hasFeature
+  subscriptions.repository.ts   # Drizzle queries for subscriptions table
+  subscriptions.webhook.controller.ts  # /webhooks/stripe — raw body, signature verification
+  subscriptions.module.ts
+  entitlements.ts               # PLAN_FEATURES map + hasFeature()
+```
+
+### Service method signatures
+
+```ts
+createCheckoutSession(userId: string, priceId: string, returnUrl: string): Promise<{ url: string }>
+createPortalSession(userId: string, returnUrl: string): Promise<{ url: string }>
+getStatus(userId: string): Promise<SubscriptionStatus>
+hasFeature(userId: string, feature: string): Promise<boolean>
+syncFromWebhook(event: Stripe.Event): Promise<void>
+```
+
+`getStatus` and `hasFeature` are called from tRPC procedures — never call the Stripe API to check this.
+
+## Checkout Flow
+
+1. Frontend calls tRPC mutation `subscriptions.createCheckoutSession` with `priceId` and `returnUrl`.
+2. tRPC delegates to `SubscriptionsService.createCheckoutSession`.
+3. Service looks up or creates a Stripe customer using the user's `stripeCustomerId` from the DB.
+4. Service calls `stripe.checkout.sessions.create()` with `mode: 'subscription'`.
+5. Service returns `{ url }` — frontend redirects with `window.location.href = url` (no router push).
+6. On return, frontend calls tRPC query `subscriptions.getStatus` to refresh UI.
+
+Never expose `session.id` to the frontend — only the redirect URL.
+
+## Customer Portal
+
+1. Frontend calls tRPC mutation `subscriptions.createPortalSession` with `returnUrl`.
+2. Service calls `stripe.billingPortal.sessions.create()` using stored `stripeCustomerId`.
+3. Returns `{ url }` — frontend redirects with `window.location.href = url`.
+
+## Webhook Handler
+
+The webhook controller must live at `apps/api/src/modules/subscriptions/subscriptions.webhook.controller.ts`.
+
+```ts
+@Controller('webhooks')
+export class SubscriptionsWebhookController {
+  @Post('stripe')
+  @HttpCode(200)
+  async handleStripe(
+    @RawBody() rawBody: Buffer,
+    @Headers('stripe-signature') sig: string,
+  ) {
+    const event = this.stripe.webhooks.constructEvent(
+      rawBody,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET,
+    );
+    await this.subscriptionsService.syncFromWebhook(event);
+  }
+}
+```
+
+Rules:
+- Raw body parsing must be enabled for this route only — do NOT use `json()` middleware globally before this.
+- `constructEvent()` is called here and nowhere else.
+- The controller catches signature errors and returns 400. All other logic is in the service.
+
+### Webhook events to handle
+
+| Event | Action |
+|-------|--------|
+| `customer.subscription.created` | Upsert subscription row, set status + priceId |
+| `customer.subscription.updated` | Update status, priceId, currentPeriodEnd, cancelAtPeriodEnd |
+| `customer.subscription.deleted` | Set status = `canceled`, clear priceId |
+| `checkout.session.completed` | If `mode === 'subscription'`, store `stripeCustomerId` if not already saved |
+| `invoice.payment_failed` | Set status = `past_due` |
+
+Unhandled events must return 200 silently — never return an error for unknown event types.
+
+## tRPC Procedures
+
+Defined in `packages/trpc/src/routers/subscriptions.ts`.
+
+```ts
+// Queries
+subscriptions.getStatus     // returns { status, priceId, cancelAtPeriodEnd, currentPeriodEnd }
+subscriptions.hasFeature    // input: { feature: z.string() }, returns boolean
+
+// Mutations
+subscriptions.createCheckoutSession  // input: { priceId, returnUrl }, returns { url }
+subscriptions.createPortalSession    // input: { returnUrl }, returns { url }
+```
+
+All procedures use `protectedProcedure` — unauthenticated access must throw `TRPCError({ code: 'UNAUTHORIZED' })`.
+
+Zod schemas defined in `packages/trpc/src/schemas/subscriptions.ts`.
+
+## Protecting UI Elements
+
+### React Server Components (preferred)
+
+Fetch subscription status server-side and conditionally render:
+
+```tsx
+// In a Server Component
+const status = await api.subscriptions.getStatus();
+const canCreateDeck = status.priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO
+  || deckCount < 3;
+
+return canCreateDeck ? <CreateDeckButton /> : <UpgradePrompt feature="unlimited-decks" />;
+```
+
+Never re-fetch in a child client component if the parent RSC already has the data — pass it as a prop.
+
+### Client Components
+
+Use a hook that wraps the tRPC query:
+
+```ts
+// hooks/useEntitlement.ts
+export function useEntitlement(feature: string): boolean {
+  const { data } = api.subscriptions.hasFeature.useQuery({ feature });
+  return data ?? false;
+}
+```
+
+```tsx
+// In a client component
+const canUseAI = useEntitlement('ai-flashcard-generation');
+return canUseAI ? <AIGenerateButton /> : <UpgradePrompt feature="ai-flashcard-generation" />;
+```
+
+### Deck creation enforcement
+
+The `3-deck-limit` feature must be enforced in `decks.service.ts` on the backend, not only in the UI:
+
+```ts
+// In DecksService.create()
+const hasUnlimited = await this.subscriptionsService.hasFeature(userId, 'unlimited-decks');
+if (!hasUnlimited) {
+  const deckCount = await this.decksRepository.countByUser(userId);
+  if (deckCount >= 3) {
+    throw new ForbiddenException('Upgrade to Pro to create more than 3 decks.');
+  }
+}
+```
+
+Never rely solely on frontend gating for access control. Always enforce limits in the service layer.
+
+### AI flashcard generation enforcement
+
+```ts
+// In AiDecksService (or wherever AI generation lives)
+const canUseAI = await this.subscriptionsService.hasFeature(userId, 'ai-flashcard-generation');
+if (!canUseAI) {
+  throw new ForbiddenException('AI flashcard generation requires a Pro plan.');
+}
+```
+
+## UpgradePrompt Component
+
+Create a reusable component in `components/features/subscriptions/upgrade-prompt.tsx`:
+
+```tsx
+interface UpgradePromptProps {
+  feature: 'unlimited-decks' | 'ai-flashcard-generation' | '3-deck-limit';
+  message?: string;
+}
+```
+
+This component is the single UI pattern for paywalling — never inline upgrade copy elsewhere.
+
+## Environment Variables
+
+```
+# Backend (apps/api)
+STRIPE_SECRET_KEY=sk_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_BASIC=price_1T7xm7Cue7ZGkDuyddzEvT4Y
+STRIPE_PRICE_PRO=price_1T7xrVCue7ZGkDuyOrMTfQK2
+
+# Frontend (apps/web) — public, price IDs only, no secret
+NEXT_PUBLIC_STRIPE_PRICE_BASIC=price_1T7xm7Cue7ZGkDuyddzEvT4Y
+NEXT_PUBLIC_STRIPE_PRICE_PRO=price_1T7xrVCue7ZGkDuyOrMTfQK2
+```
+
+`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are never prefixed with `NEXT_PUBLIC_` and never imported in `apps/web`.
+
+## General Rules
+
+- Subscription status source of truth: `subscriptions` table in the database — not Stripe API.
+- Never call `stripe.subscriptions.retrieve()` at request time — always read from DB.
+- Never expose secret key, webhook secret, or raw Stripe objects to the frontend via tRPC.
+- Always verify webhook signatures — reject events without a valid `stripe-signature` header.
+- Test mode: use `.env.test` with `sk_test_...` keys. Live mode: `.env.production` with `sk_live_...` keys. Never mix.
+- Stripe mock (`stripe-mock`) or recorded fixtures used in CI — never hit live or test Stripe in automated tests.

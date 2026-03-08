@@ -4,8 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { createClient } from '@/lib/supabase/server'
-import { insertDeck, updateDeckById, softDeleteDeck } from '@/db/queries/decks'
+import { insertDeck, updateDeckById, hardDeleteDeck, countDecksByUserId } from '@/db/queries/decks'
+import { hardDeleteCardsByDeckId } from '@/db/queries/cards'
 import { DIFFICULTIES, type Difficulty } from '@/db/schema'
+import { getUserSubscriptionStatus } from '@/app/actions/stripe'
 
 export async function createDeckAction(formData: FormData) {
   const supabase = await createClient()
@@ -19,6 +21,16 @@ export async function createDeckAction(formData: FormData) {
 
   if (!title || !DIFFICULTIES.includes(difficulty as Difficulty)) {
     throw new Error('Invalid input')
+  }
+
+  const email = typeof data.claims.email === 'string' ? data.claims.email : ''
+  const { isPro } = await getUserSubscriptionStatus(email, userId)
+
+  if (!isPro) {
+    const deckCount = await countDecksByUserId(userId)
+    if (deckCount >= 3) {
+      throw new Error('FREE_PLAN_LIMIT')
+    }
   }
 
   const newDeck = await insertDeck({
@@ -62,7 +74,8 @@ export async function deleteDeckAction(deckId: string) {
   if (error || !data?.claims?.sub) throw new Error('Unauthorized')
 
   const userId = data.claims.sub as string
-  const deleted = await softDeleteDeck(deckId, userId)
+  await hardDeleteCardsByDeckId(deckId)
+  const deleted = await hardDeleteDeck(deckId, userId)
   if (!deleted) throw new Error('Deck not found')
 
   revalidatePath('/dashboard')

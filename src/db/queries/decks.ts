@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, count } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { decks } from '@/db/schema'
@@ -37,6 +37,14 @@ export const getDeckById = cache(async (deckId: string, userId: string) => {
   return deck ?? null
 })
 
+export async function countDecksByUserId(userId: string): Promise<number> {
+  const [result] = await db
+    .select({ count: count() })
+    .from(decks)
+    .where(and(eq(decks.userId, userId), isNull(decks.deletedAt)))
+  return result?.count ?? 0
+}
+
 export async function insertDeck(values: {
   userId: string
   title: string
@@ -71,6 +79,13 @@ export async function softDeleteDeck(deckId: string, userId: string) {
     .where(
       and(eq(decks.id, deckId), eq(decks.userId, userId), isNull(decks.deletedAt))
     )
+    .returning({ id: decks.id })
+  return deleted ?? null
+}
+
+export async function hardDeleteDeck(deckId: string, userId: string) {
+  const [deleted] = await db.delete(decks)
+    .where(and(eq(decks.id, deckId), eq(decks.userId, userId)))
     .returning({ id: decks.id })
   return deleted ?? null
 }

@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { LogOut, Moon, Sun, User } from 'lucide-react'
+import { LogOut, Moon, Settings, Sun, User } from 'lucide-react'
 
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -42,6 +42,10 @@ export function UserDropdown({ email }: UserDropdownProps) {
           <p className="truncate text-sm text-muted-foreground">{email}</p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push('/account')}>
+          <Settings />
+          Manage Account
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
           {theme === 'dark' ? <Sun /> : <Moon />}
           {theme === 'dark' ? 'Light mode' : 'Dark mode'}

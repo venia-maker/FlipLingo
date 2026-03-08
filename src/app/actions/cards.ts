@@ -9,7 +9,7 @@ import {
   getCardsByDeckId,
   getCardById,
   updateCardById,
-  softDeleteCard,
+  hardDeleteCard,
 } from '@/db/queries/cards'
 import { getDeckById } from '@/db/queries/decks'
 
@@ -77,6 +77,6 @@ export async function deleteCardAction(cardId: string) {
   const deck = await getDeckById(card.deckId, userId)
   if (!deck) throw new Error('Unauthorized')
 
-  await softDeleteCard(cardId)
+  await hardDeleteCard(cardId)
   revalidatePath(`/deck/${card.deckId}`)
 }

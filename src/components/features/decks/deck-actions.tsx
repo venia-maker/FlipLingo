@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -12,9 +12,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { EditDeckDialog } from './edit-deck-dialog'
-import { DeleteConfirmationDialog } from './delete-confirmation-dialog'
-import { deleteDeckAction } from '@/app/actions/decks'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { updateDeckAction, deleteDeckAction } from '@/app/actions/decks'
 
 interface DeckActionsProps {
   deck: {
@@ -25,49 +33,128 @@ interface DeckActionsProps {
   }
 }
 
+const difficulties = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'mixed', label: 'Mixed' },
+] as const
+
 export function DeckActions({ deck }: DeckActionsProps) {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [selectedDifficulty, setSelectedDifficulty] = useState(deck.difficulty)
 
-  async function handleDelete() {
-    toast.success('Deck deleted successfully')
-    await deleteDeckAction(deck.id)
+  const handleEdit = (formData: FormData) => {
+    startTransition(async () => {
+      try {
+        await updateDeckAction(deck.id, formData)
+        toast.success('Deck updated')
+        setEditOpen(false)
+      } catch {
+        toast.error('Failed to update deck')
+      }
+    })
+  }
+
+  const handleDelete = () => {
+    startTransition(async () => {
+      try {
+        await deleteDeckAction(deck.id)
+        toast.success('Deck deleted')
+      } catch {
+        toast.error('Failed to delete deck')
+      }
+    })
   }
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
-            <MoreVertical className="size-4" />
-            Actions
+          <Button variant="ghost" size="icon">
+            <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+          <DropdownMenuItem onClick={() => setEditOpen(true)}>
             <Pencil className="size-4" />
-            Edit Deck
+            Edit
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setDeleteOpen(true)}
+            onClick={() => setDeleteOpen(true)}
+            className="text-red-600 dark:text-red-400"
           >
             <Trash2 className="size-4" />
-            Delete Deck
+            Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <EditDeckDialog deck={deck} open={editOpen} onOpenChange={setEditOpen} />
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Deck</DialogTitle>
+            <DialogDescription>Update your deck details.</DialogDescription>
+          </DialogHeader>
+          <form action={handleEdit}>
+            <div className="flex flex-col gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-title">Title</Label>
+                <Input id="edit-title" name="title" defaultValue={deck.title} required />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Input id="edit-description" name="description" defaultValue={deck.description ?? ''} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Difficulty</Label>
+                <input type="hidden" name="difficulty" value={selectedDifficulty} />
+                <div className="grid grid-cols-2 gap-2">
+                  {difficulties.map((d) => (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => setSelectedDifficulty(d.value)}
+                      className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                        selectedDifficulty === d.value
+                          ? 'border-primary bg-primary/10'
+                          : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-700 dark:hover:border-zinc-600'
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="mt-6">
+              <Button type="submit" disabled={isPending}>
+                {isPending ? 'Saving…' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-      <DeleteConfirmationDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        title="Delete Deck"
-        description={`Are you sure you want to delete "${deck.title}"? All cards in this deck will also be deleted. This action cannot be undone.`}
-        onConfirm={handleDelete}
-      />
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Deck</DialogTitle>
+            <DialogDescription>
+              This will permanently delete &quot;{deck.title}&quot; and all its cards. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
+              {isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

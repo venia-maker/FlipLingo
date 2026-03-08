@@ -8,6 +8,13 @@
       "when": 1772709157227,
       "tag": "0000_large_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772965981814,
+      "tag": "0001_add-subscriptions-table",
+      "breakpoints": true
     }
   ]
 }
