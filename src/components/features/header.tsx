@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 
+import Link from 'next/link'
+
 import { Button } from '@/components/ui/button'
 import { AuthDialog } from '@/components/features/auth/auth-dialog'
 import { UserDropdown } from '@/components/features/auth/user-dropdown'
@@ -22,9 +24,12 @@ export function Header({ user }: HeaderProps) {
   return (
     <>
       <header className="flex w-full items-center justify-between px-6 py-4">
-        <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <Link
+          href={user ? '/dashboard' : '/'}
+          className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+        >
           FlipLingo
-        </span>
+        </Link>
         <div className="flex items-center gap-3">
           {user ? (
             <UserDropdown email={user.email} />
