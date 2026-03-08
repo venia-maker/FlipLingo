@@ -17,7 +17,7 @@ export default async function DashboardPage() {
 
   const { data, error } = await supabase.auth.getClaims()
   if (error || !data?.claims) {
-    redirect('/auth/login')
+    redirect('/')
   }
 
   const email = typeof data.claims.email === 'string' ? data.claims.email : ''
