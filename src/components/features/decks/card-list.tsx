@@ -72,6 +72,12 @@ export function CardList({ deckId, initialCards }: CardListProps) {
     setCards((prev) => prev.filter((c) => c.id !== cardId))
   }, [])
 
+  const handleCardUpdated = useCallback((cardId: string, front: string, back: string) => {
+    setCards((prev) =>
+      prev.map((c) => (c.id === cardId ? { ...c, front, back } : c)),
+    )
+  }, [])
+
   if (cards.length === 0) {
     return (
       <p className="text-center text-zinc-500 dark:text-zinc-400">
@@ -85,7 +91,7 @@ export function CardList({ deckId, initialCards }: CardListProps) {
       <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-3">
           {cards.map((card) => (
-            <SortableCard key={card.id} card={card} onDeleted={handleCardDeleted} />
+            <SortableCard key={card.id} card={card} onDeleted={handleCardDeleted} onUpdated={handleCardUpdated} />
           ))}
         </div>
       </SortableContext>

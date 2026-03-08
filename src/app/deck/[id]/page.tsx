@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Play } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 
 import { createClient } from '@/lib/supabase/server'
 import { getDeckById, getDecksByUserId } from '@/db/queries/decks'
@@ -10,7 +10,7 @@ import { Header } from '@/components/features/header'
 import { CardList } from '@/components/features/decks/card-list'
 import { DeckActions } from '@/components/features/decks/deck-actions'
 import { AddCardDialog } from '@/components/features/decks/add-card-dialog'
-import { StudyProgressBadge } from '@/components/features/decks/study-progress-badge'
+import { StudyButton } from '@/components/features/decks/study-button'
 import { Button } from '@/components/ui/button'
 
 const difficultyColors: Record<string, string> = {
@@ -87,17 +87,7 @@ export default async function DeckPage({ params }: DeckPageProps) {
             {cards.length} card{cards.length === 1 ? '' : 's'}
           </p>
           <div className="flex items-center gap-2">
-            {cards.length > 0 && (
-              <>
-                <StudyProgressBadge deckId={id} />
-                <Link href={`/deck/${id}/study`}>
-                  <Button size="sm" variant="default">
-                    <Play className="size-4" />
-                    Start Learning
-                  </Button>
-                </Link>
-              </>
-            )}
+            <StudyButton deckId={id} cardCount={cards.length} />
             <AddCardDialog deckId={id} />
           </div>
         </div>
