@@ -1,3 +1,8 @@
 export { decks, decksRelations, DIFFICULTIES, difficultyEnum, type Difficulty } from './decks'
 export { cards, cardsRelations } from './cards'
-export { subscriptions } from './subscriptions'
+export {
+  subscriptions,
+  subscriptionsRelations,
+  subscriptionHistory,
+  subscriptionHistoryRelations,
+} from './subscriptions'

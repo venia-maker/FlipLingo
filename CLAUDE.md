@@ -1,7 +1,7 @@
 # FlipLingo — CLAUDE.md
 
 ## Project Overview
-FlipLingo is a language flashcard SaaS. Users study English→target language vocabulary via flip cards, create decks, track progress, and unlock premium decks via Stripe subscriptions. Future: spaced repetition, AI-generated decks.
+FlipLingo is a general-purpose flashcard SaaS. Each card has a front (question) and a back (answer). Cards can be used for any subject — language learning (e.g. English question → French answer), general knowledge (e.g. "What is photosynthesis?" → definition), or any Q&A format. The app is not tied to languages; it supports any question-and-answer use case. Users create decks, study via flip cards, track progress, and unlock premium features via Stripe subscriptions. Future: spaced repetition, AI-generated decks.
 
 ---
 

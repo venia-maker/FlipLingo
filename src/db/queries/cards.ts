@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { eq, and, asc, isNull } from 'drizzle-orm'
+import { eq, and, asc, isNull, inArray } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { cards } from '@/db/schema'
@@ -84,6 +84,10 @@ export async function hardDeleteCard(cardId: string) {
     .where(eq(cards.id, cardId))
     .returning({ id: cards.id })
   return deleted ?? null
+}
+
+export async function hardDeleteCards(cardIds: string[]) {
+  await db.delete(cards).where(inArray(cards.id, cardIds))
 }
 
 export async function hardDeleteCardsByDeckId(deckId: string) {
