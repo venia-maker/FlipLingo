@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe } from '@/lib/stripe'
 import { upsertSubscription, createSubscriptionHistoryEntry } from '@/db/queries/subscriptions'
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? ''
 
 async function resolveUserId(subscription: Stripe.Subscription): Promise<string | null> {
   // 1. Check subscription metadata
@@ -80,8 +80,9 @@ export async function POST(request: Request) {
   const body = await request.text()
   const signature = request.headers.get('stripe-signature')
 
-  if (!signature) {
-    return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
+  if (!signature || !webhookSecret) {
+    console.error('[Stripe Webhook] Missing signature or STRIPE_WEBHOOK_SECRET')
+    return NextResponse.json({ error: 'Missing signature or webhook secret' }, { status: 400 })
   }
 
   let event: Stripe.Event
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[Stripe Webhook] Verification failed:', message)
     return NextResponse.json({ error: `Webhook verification failed: ${message}` }, { status: 400 })
   }
 
@@ -105,14 +107,21 @@ export async function POST(request: Request) {
 
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session
-      if (session.subscription && session.metadata?.userId) {
+      if (session.subscription) {
         const subId = typeof session.subscription === 'string'
           ? session.subscription
           : session.subscription.id
-        // Ensure the subscription has the userId in its metadata
-        await stripe.subscriptions.update(subId, {
-          metadata: { userId: session.metadata.userId },
-        })
+
+        // Backfill userId metadata on the subscription
+        if (session.metadata?.userId) {
+          await stripe.subscriptions.update(subId, {
+            metadata: { userId: session.metadata.userId },
+          })
+        }
+
+        // Also sync the subscription to DB immediately
+        const subscription = await stripe.subscriptions.retrieve(subId)
+        await syncSubscription(subscription, 'created')
       }
       break
     }

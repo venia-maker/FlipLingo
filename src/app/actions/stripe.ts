@@ -41,10 +41,17 @@ function hasPendingCancellation(cancelAtPeriodEnd: boolean, cancelAt: Date | nul
   return cancelAtPeriodEnd || (cancelAt !== null && cancelAt > new Date())
 }
 
-export async function getUserSubscriptionStatus(_email: string, userId?: string): Promise<{ isPro: boolean }> {
+export async function getUserSubscriptionStatus(email: string, userId?: string): Promise<{ isPro: boolean }> {
   if (!userId) return { isPro: false }
 
-  const sub = await getSubscriptionByUserId(userId)
+  let sub = await getSubscriptionByUserId(userId)
+
+  // If no DB record, sync from Stripe as fallback (handles webhook failures / race conditions)
+  if (!sub && email) {
+    await syncSubscriptionFromStripe(userId, email)
+    sub = await getSubscriptionByUserId(userId)
+  }
+
   if (!sub) return { isPro: false }
   const pendingCancel = hasPendingCancellation(sub.cancelAtPeriodEnd, sub.cancelAt)
   const isPro = sub.status === 'active' || (
@@ -192,6 +199,62 @@ export async function getUserSubscriptionDetails(email: string): Promise<Subscri
     priceId: item?.price?.id ?? null,
     amount: item?.price?.unit_amount ? item.price.unit_amount / 100 : null,
     interval: item?.price?.recurring?.interval ?? null,
+  }
+}
+
+/** Sync subscription from Stripe to DB (used after checkout and as webhook fallback) */
+export async function syncSubscriptionFromStripe(userId: string, email: string): Promise<void> {
+  try {
+    const customers = await stripe.customers.list({ email, limit: 1 })
+    if (customers.data.length === 0) return
+
+    const subs = await stripe.subscriptions.list({
+      customer: customers.data[0].id,
+      limit: 1,
+    })
+    if (subs.data.length === 0) return
+
+    const sub = subs.data[0]
+    const item = sub.items.data[0]
+    const currentPeriodEnd = item?.current_period_end
+      ? new Date(item.current_period_end * 1000)
+      : null
+    const cancelAt = sub.cancel_at
+      ? new Date(sub.cancel_at * 1000)
+      : null
+
+    const shared = {
+      stripeSubscriptionId: sub.id,
+      status: sub.status,
+      priceId: item?.price?.id ?? null,
+      amount: item?.price?.unit_amount ?? null,
+      interval: item?.price?.recurring?.interval ?? null,
+      currentPeriodEnd,
+      cancelAtPeriodEnd: sub.cancel_at_period_end,
+      cancelAt,
+    }
+
+    await Promise.all([
+      upsertSubscription({
+        userId,
+        stripeCustomerId: customers.data[0].id,
+        ...shared,
+      }),
+      createSubscriptionHistoryEntry({
+        userId,
+        eventType: 'checkout_sync',
+        ...shared,
+      }),
+    ])
+
+    // Backfill userId onto the Stripe subscription metadata
+    if (!sub.metadata?.userId) {
+      await stripe.subscriptions.update(sub.id, {
+        metadata: { userId },
+      })
+    }
+  } catch (e) {
+    console.error('[Stripe] syncSubscriptionFromStripe failed:', e)
   }
 }
 

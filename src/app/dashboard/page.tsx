@@ -10,11 +10,11 @@ import { getTaskCountByUserId, getTaskCountsByDeckIds } from '@/db/queries/tasks
 import { Button } from '@/components/ui/button'
 import { DeckCard } from '@/components/features/decks/deck-card'
 import { CreateDeckDialog } from '@/components/features/decks/create-deck-dialog'
-import { getUserSubscriptionStatus } from '@/app/actions/stripe'
+import { getUserSubscriptionStatus, syncSubscriptionFromStripe } from '@/app/actions/stripe'
 
 const FREE_DECK_LIMIT = 3
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ checkout?: string }> }) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.getClaims()
@@ -24,6 +24,12 @@ export default async function DashboardPage() {
 
   const email = typeof data.claims.email === 'string' ? data.claims.email : ''
   const userId = data.claims.sub as string
+
+  // After checkout, sync subscription from Stripe before reading status
+  const params = await searchParams
+  if (params.checkout === 'success' && email) {
+    await syncSubscriptionFromStripe(userId, email)
+  }
 
   const [userDecks, { isPro }, taskCount] = await Promise.all([
     getDecksByUserId(userId),
