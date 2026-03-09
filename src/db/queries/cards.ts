@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { eq, and, asc, isNull } from 'drizzle-orm'
+import { eq, and, asc, isNull, inArray } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { cards } from '@/db/schema'
@@ -44,6 +44,20 @@ export async function insertCard(values: {
   return newCard
 }
 
+export async function insertCards(values: Array<{
+  deckId: string
+  front: string
+  back: string
+  position: number
+}>) {
+  return db.insert(cards).values(values).returning({
+    id: cards.id,
+    front: cards.front,
+    back: cards.back,
+    position: cards.position,
+  })
+}
+
 export async function updateCardById(
   cardId: string,
   values: { front?: string; back?: string; position?: number },
@@ -84,6 +98,10 @@ export async function hardDeleteCard(cardId: string) {
     .where(eq(cards.id, cardId))
     .returning({ id: cards.id })
   return deleted ?? null
+}
+
+export async function hardDeleteCards(cardIds: string[]) {
+  await db.delete(cards).where(inArray(cards.id, cardIds))
 }
 
 export async function hardDeleteCardsByDeckId(deckId: string) {

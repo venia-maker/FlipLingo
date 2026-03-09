@@ -22,10 +22,11 @@ export default async function StudyPage({ params }: StudyPageProps) {
   const email = typeof data.claims.email === 'string' ? data.claims.email : ''
   const userId = data.claims.sub as string
 
-  const deck = await getDeckById(id, userId)
+  const [deck, cards] = await Promise.all([
+    getDeckById(id, userId),
+    getCardsByDeckId(id),
+  ])
   if (!deck) redirect('/dashboard')
-
-  const cards = await getCardsByDeckId(id)
   if (cards.length === 0) redirect(`/deck/${id}`)
 
   return (

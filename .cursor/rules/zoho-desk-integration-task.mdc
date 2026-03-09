@@ -1,0 +1,101 @@
+---
+alwaysApply: true
+---
+# Zoho Desk Integration — Task Plan
+
+## Context
+Add Zoho Desk integration (Pro-only) so users can create Zoho Desk tickets from study session results. Includes OAuth flow, ticket creation, tasks page, and webhook for status sync.
+
+**Key finding:** Study sessions are currently localStorage-only — must add DB persistence first.
+
+## Implementation Steps
+
+### Step 1: Database Schema (3 new tables)
+
+**`src/db/schema/zoho-integrations.ts`** — `zohoIntegrations` table:
+- `id` (uuid PK), `userId` (uuid, unique), `accessToken` (text, encrypted), `refreshToken` (text, encrypted), `orgId` (text, nullable), `tokenExpiresAt` (timestamp), `createdAt`, `updatedAt`
+
+**`src/db/schema/study-sessions.ts`** — `studySessions` table:
+- `id` (uuid PK), `userId`, `deckId` (FK→decks), `totalCards`, `correctCount`, `incorrectCount`, `scorePercent`, `cardResults` (jsonb — array of {cardId, front, back, correct}), `completedAt`
+
+**`src/db/schema/tasks.ts`** — `tasks` table:
+- `id` (uuid PK), `userId`, `deckId` (FK→decks, nullable), `studySessionId` (FK→studySessions, nullable), `zohoTicketId` (text, unique, nullable), `subject`, `description`, `status` (default 'open'), `priority`, `dueDate`, `createdAt`, `updatedAt`, `deletedAt` (soft delete)
+
+Update `src/db/schema/index.ts` + run `drizzle-kit generate`.
+
+### Step 2: Encryption Utility — `src/lib/crypto.ts`
+AES-256-GCM encrypt/decrypt for Zoho tokens. Uses `ZOHO_TOKEN_ENCRYPTION_KEY` env var (32 bytes hex).
+
+### Step 3: Zoho Config + Client
+- **`src/lib/zoho/config.ts`** — env var constants (client ID, secret, redirect URI, scopes, API base URL)
+- **`src/lib/zoho/client.ts`** — `zohoFetch(userId, path, options)` helper: gets valid token, makes request, handles 401 retry
+
+### Step 4: Query Functions
+- **`src/db/queries/zoho-integrations.ts`** — get/upsert/update/delete by userId
+- **`src/db/queries/study-sessions.ts`** — insert, getByDeck, getById
+- **`src/db/queries/tasks.ts`** — insert, getByUser, getById, update, updateByZohoTicketId, softDelete
+
+Follow patterns in `src/db/queries/cards.ts` (React.cache, explicit columns).
+
+### Step 5: Server Actions
+**`src/app/actions/zoho.ts`:**
+- `getZohoAuthUrl()` — build OAuth URL with scopes, response_type=code, access_type=offline
+- `exchangeZohoCode(code)` — exchange auth code → tokens, encrypt, store, fetch orgId
+- `disconnectZoho()` — delete integration row
+- `getZohoConnectionStatus()` — returns `{connected, orgId}`
+- `getValidAccessToken(userId)` — on-demand refresh if within 5min of expiry
+- `refreshZohoToken(userId)` — POST to token endpoint, update DB
+
+**`src/app/actions/study-sessions.ts`:**
+- `saveStudySession(data)` — validate + insert, return session with id
+
+**`src/app/actions/tasks.ts`:**
+- `createZohoTask(studySessionId)` — Pro check, load session, build ticket payload, POST to Zoho, save locally
+- `getTasksForUser()` — paginated task list
+- `deleteTask(taskId)` — soft delete
+- `syncTaskStatus(taskId)` — fetch from Zoho API, update local status
+
+### Step 6: OAuth Callback — `src/app/oauth/zoho/page.tsx`
+Server component. Reads `searchParams.code`, calls `exchangeZohoCode`, redirects to `/account?tab=integrations`.
+
+### Step 7: Integrations Tab
+- **New:** `src/components/features/account/integrations-tab.tsx` — connect/disconnect/upgrade UI
+- **Modify:** `src/components/features/account/account-tabs.tsx` — add 4th "Integrations" tab
+
+### Step 8: Study Session Persistence
+- **Extract** score screen from `study-session.tsx` into `study-score.tsx` (file over 300 lines)
+- On study completion: call `saveStudySession` server action
+- Add "Create Zoho Task" button (shown only if Pro + Zoho connected)
+- **Modify** deck page to pass `isPro` and `zohoConnected` props
+
+### Step 9: Tasks Page
+- **`src/app/tasks/page.tsx`** — server component, auth check, fetch tasks
+- **`src/components/features/tasks/tasks-list.tsx`** — table/card layout with status badges
+- **`src/components/features/tasks/task-card.tsx`** — individual task with sync/delete actions
+
+### Step 10: Zoho Webhook — `src/app/api/webhooks/zoho/route.ts`
+POST handler: verify `ZOHO_WEBHOOK_SECRET` header, parse payload, extract ticket ID + new status, update local task. Follow Stripe webhook pattern.
+
+## Ticket Payload Details
+- Subject: `"{deckTitle}" Study Review - {date}`
+- Description: card-by-card results with correct/incorrect markers, score, counts
+- Priority: high (<40%), medium (40-70%), low (>70%)
+- Due date: +3 days from creation
+
+## Env Vars Needed
+```
+ZOHO_CLIENT_ID=
+ZOHO_CLIENT_SECRET=
+ZOHO_REDIRECT_URI=http://localhost:3000/oauth/zoho
+ZOHO_TOKEN_ENCRYPTION_KEY=  # 32 bytes hex-encoded
+ZOHO_WEBHOOK_SECRET=
+```
+
+## Verification Checklist
+- [ ] Migration generates cleanly
+- [ ] Account → Integrations tab renders correctly
+- [ ] OAuth flow redirects to Zoho and back
+- [ ] Study session results persist to DB
+- [ ] "Create Zoho Task" creates ticket in Zoho Desk
+- [ ] /tasks page displays tasks with correct status
+- [ ] Webhook endpoint accepts POST and updates task status

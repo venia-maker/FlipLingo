@@ -3,13 +3,14 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
-import { getSubscriptionByUserId } from '@/db/queries/subscriptions'
+import { getSubscriptionByUserId, upsertSubscription, createSubscriptionHistoryEntry } from '@/db/queries/subscriptions'
 
 export interface SubscriptionDetails {
   isPro: boolean
   status: string | null
   currentPeriodEnd: Date | null
   cancelAtPeriodEnd: boolean
+  cancelAt: Date | null
   priceId: string | null
   amount: number | null
   interval: string | null
@@ -20,17 +21,25 @@ const NO_SUB: SubscriptionDetails = {
   status: null,
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
+  cancelAt: null,
   priceId: null,
   amount: null,
   interval: null,
+}
+
+/** Check if subscription has a pending cancellation (either via cancel_at_period_end or cancel_at) */
+function hasPendingCancellation(cancelAtPeriodEnd: boolean, cancelAt: Date | null): boolean {
+  return cancelAtPeriodEnd || (cancelAt !== null && cancelAt > new Date())
 }
 
 export async function getUserSubscriptionStatus(_email: string, userId?: string): Promise<{ isPro: boolean }> {
   if (!userId) return { isPro: false }
 
   const sub = await getSubscriptionByUserId(userId)
-  const isPro = sub?.status === 'active' || (
-    sub?.cancelAtPeriodEnd === true && sub?.currentPeriodEnd !== null && sub.currentPeriodEnd > new Date()
+  if (!sub) return { isPro: false }
+  const pendingCancel = hasPendingCancellation(sub.cancelAtPeriodEnd, sub.cancelAt)
+  const isPro = sub.status === 'active' || (
+    pendingCancel && sub.currentPeriodEnd !== null && sub.currentPeriodEnd > new Date()
   )
   return { isPro }
 }
@@ -39,15 +48,84 @@ export async function getSubscriptionDetailsByUserId(userId: string): Promise<Su
   const sub = await getSubscriptionByUserId(userId)
   if (!sub) return NO_SUB
 
+  // Refresh from Stripe to ensure we have the latest cancellation and billing data
+  if (sub.stripeSubscriptionId) {
+    try {
+      const stripeSub = await stripe.subscriptions.retrieve(sub.stripeSubscriptionId)
+
+      if (typeof stripeSub !== 'object' || !('status' in stripeSub)) {
+        // Subscription was deleted from Stripe
+        return NO_SUB
+      }
+
+      const item = stripeSub.items.data[0]
+      const periodEndTimestamp = item?.current_period_end ?? null
+      const currentPeriodEnd = periodEndTimestamp
+        ? new Date(periodEndTimestamp * 1000)
+        : null
+      const cancelAtPeriodEnd = stripeSub.cancel_at_period_end
+      const cancelAt = stripeSub.cancel_at
+        ? new Date(stripeSub.cancel_at * 1000)
+        : null
+
+      // Sync fresh data back to DB and record history
+      const shared = {
+        stripeSubscriptionId: stripeSub.id,
+        status: stripeSub.status,
+        priceId: item?.price?.id ?? null,
+        amount: item?.price?.unit_amount ?? null,
+        interval: item?.price?.recurring?.interval ?? null,
+        currentPeriodEnd,
+        cancelAtPeriodEnd,
+        cancelAt,
+      }
+
+      await Promise.all([
+        upsertSubscription({
+          userId,
+          stripeCustomerId: typeof stripeSub.customer === 'string'
+            ? stripeSub.customer
+            : stripeSub.customer.id,
+          ...shared,
+        }),
+        createSubscriptionHistoryEntry({
+          userId,
+          eventType: 'sync',
+          ...shared,
+        }),
+      ])
+
+      const pendingCancel = hasPendingCancellation(cancelAtPeriodEnd, cancelAt)
+      const isActiveOrCanceling = stripeSub.status === 'active' || (
+        pendingCancel && currentPeriodEnd !== null && currentPeriodEnd > new Date()
+      )
+
+      return {
+        isPro: isActiveOrCanceling,
+        status: stripeSub.status,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: pendingCancel,
+        cancelAt,
+        priceId: item?.price?.id ?? null,
+        amount: item?.price?.unit_amount ? item.price.unit_amount / 100 : null,
+        interval: item?.price?.recurring?.interval ?? null,
+      }
+    } catch {
+      // Fall through to DB data if Stripe fetch fails
+    }
+  }
+
+  const pendingCancel = hasPendingCancellation(sub.cancelAtPeriodEnd, sub.cancelAt)
   const isActiveOrCanceling = sub.status === 'active' || (
-    sub.cancelAtPeriodEnd === true && sub.currentPeriodEnd !== null && sub.currentPeriodEnd > new Date()
+    pendingCancel && sub.currentPeriodEnd !== null && sub.currentPeriodEnd > new Date()
   )
 
   return {
     isPro: isActiveOrCanceling,
     status: sub.status,
     currentPeriodEnd: sub.currentPeriodEnd,
-    cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+    cancelAtPeriodEnd: pendingCancel,
+    cancelAt: sub.cancelAt,
     priceId: sub.priceId,
     amount: sub.amount ? sub.amount / 100 : null,
     interval: sub.interval,
@@ -76,11 +154,13 @@ export async function getUserSubscriptionDetails(email: string): Promise<Subscri
       const item = sub.items.data[0]
       const periodEnd = item?.current_period_end ?? null
 
+      const cancelAt = sub.cancel_at ? new Date(sub.cancel_at * 1000) : null
       return {
         isPro: sub.status === 'active',
         status: sub.status,
         currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
-        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        cancelAtPeriodEnd: hasPendingCancellation(sub.cancel_at_period_end, cancelAt),
+        cancelAt,
         priceId: item?.price?.id ?? null,
         amount: item?.price?.unit_amount ? item.price.unit_amount / 100 : null,
         interval: item?.price?.recurring?.interval ?? null,
@@ -93,11 +173,13 @@ export async function getUserSubscriptionDetails(email: string): Promise<Subscri
   const sub = subscriptions.data[0]
   const item = sub.items.data[0]
 
+  const cancelAt = sub.cancel_at ? new Date(sub.cancel_at * 1000) : null
   return {
     isPro: true,
     status: sub.status,
     currentPeriodEnd: item?.current_period_end ? new Date(item.current_period_end * 1000) : null,
-    cancelAtPeriodEnd: sub.cancel_at_period_end,
+    cancelAtPeriodEnd: hasPendingCancellation(sub.cancel_at_period_end, cancelAt),
+    cancelAt,
     priceId: item?.price?.id ?? null,
     amount: item?.price?.unit_amount ? item.price.unit_amount / 100 : null,
     interval: item?.price?.recurring?.interval ?? null,

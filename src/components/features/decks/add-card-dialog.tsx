@@ -37,7 +37,7 @@ export function AddCardDialog({ deckId }: AddCardDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
+        <Button size="sm" variant="outline">
           <Plus className="size-4" />
           Add Card
         </Button>

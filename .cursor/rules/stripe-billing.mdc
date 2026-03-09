@@ -49,6 +49,7 @@ export const subscriptions = pgTable('subscriptions', {
   stripeCurrentPeriodEnd: timestamp('stripe_current_period_end'),
   status: text('status').notNull().default('inactive'), // active | trialing | past_due | canceled | inactive
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  canceledAt: timestamp('canceled_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').notNull(),
 });
@@ -131,13 +132,40 @@ Rules:
 
 ### Webhook events to handle
 
-| Event | Action |
-|-------|--------|
-| `customer.subscription.created` | Upsert subscription row, set status + priceId |
-| `customer.subscription.updated` | Update status, priceId, currentPeriodEnd, cancelAtPeriodEnd |
-| `customer.subscription.deleted` | Set status = `canceled`, clear priceId |
-| `checkout.session.completed` | If `mode === 'subscription'`, store `stripeCustomerId` if not already saved |
-| `invoice.payment_failed` | Set status = `past_due` |
+Every subscription-related webhook event must perform **two actions**:
+1. **Update the `subscriptions` table** with the latest state.
+2. **Insert a new row into `subscription_history`** to record the change (event type, status, priceId, timestamp, canceledAt).
+
+| Event | Subscription Update | History Record |
+|-------|--------------------:|----------------|
+| `customer.subscription.created` | Upsert subscription row, set status + priceId + currentPeriodEnd | Insert history with `event: 'created'`, status, priceId |
+| `customer.subscription.updated` | Update status, priceId, currentPeriodEnd, cancelAtPeriodEnd, canceledAt | Insert history with `event: 'updated'`, status, priceId, cancelAtPeriodEnd, canceledAt |
+| `customer.subscription.deleted` | Set status = `canceled`, clear priceId, set canceledAt = now (or Stripe's `canceled_at`) | Insert history with `event: 'deleted'`, status = `canceled`, canceledAt |
+| `checkout.session.completed` | If `mode === 'subscription'`, store `stripeCustomerId` if not already saved | Insert history with `event: 'checkout_completed'` |
+| `invoice.payment_failed` | Set status = `past_due` | Insert history with `event: 'payment_failed'`, status = `past_due` |
+
+### canceledAt handling
+
+- When a subscription is canceled with `cancel_at_period_end: true`, set `canceledAt` to the value of `current_period_end` (the date it will actually end) and `cancelAtPeriodEnd: true`.
+- When a subscription is canceled immediately (same-day cancellation), set `canceledAt` to the current timestamp (or Stripe's `canceled_at`) — this will match the cancellation date.
+- On `customer.subscription.deleted`, always set `canceledAt` from Stripe's `canceled_at` field on the subscription object.
+- The `canceledAt` field must be stored on both the `subscriptions` table and in the corresponding `subscription_history` row.
+
+### subscription_history schema
+
+```ts
+export const subscriptionHistory = pgTable('subscription_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  subscriptionId: uuid('subscription_id').notNull().references(() => subscriptions.id),
+  event: text('event').notNull(), // 'created' | 'updated' | 'deleted' | 'checkout_completed' | 'payment_failed'
+  status: text('status'),
+  stripePriceId: text('stripe_price_id'),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end'),
+  canceledAt: timestamp('canceled_at'),
+  stripeCurrentPeriodEnd: timestamp('stripe_current_period_end'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+```
 
 Unhandled events must return 200 silently — never return an error for unknown event types.
 

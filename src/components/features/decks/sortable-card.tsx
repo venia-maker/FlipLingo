@@ -35,11 +35,14 @@ interface SortableCardProps {
     back: string
     position: number
   }
+  isSelected: boolean
+  isSelecting: boolean
+  onToggleSelect: (cardId: string) => void
   onDeleted: (cardId: string) => void
   onUpdated: (cardId: string, front: string, back: string) => void
 }
 
-export function SortableCard({ card, onDeleted, onUpdated }: SortableCardProps) {
+export function SortableCard({ card, isSelected, isSelecting, onToggleSelect, onDeleted, onUpdated }: SortableCardProps) {
   const [isPending, startTransition] = useTransition()
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -92,8 +95,21 @@ export function SortableCard({ card, onDeleted, onUpdated }: SortableCardProps) 
       <Card
         ref={setNodeRef}
         style={style}
-        className="flex-row items-center gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className={`group flex-row items-center gap-4 rounded-xl border p-4 shadow-sm transition-colors ${
+          isSelected
+            ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/30'
+            : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900'
+        }`}
       >
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect(card.id)}
+          className={`size-4 shrink-0 cursor-pointer rounded border-zinc-300 text-blue-600 accent-blue-600 transition-opacity ${
+            isSelecting ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        />
+
         <button
           type="button"
           className="cursor-grab touch-none text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"

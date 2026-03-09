@@ -3,7 +3,7 @@ import type Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 
 import { stripe } from '@/lib/stripe'
-import { upsertSubscription } from '@/db/queries/subscriptions'
+import { upsertSubscription, createSubscriptionHistoryEntry } from '@/db/queries/subscriptions'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
@@ -37,27 +37,43 @@ async function resolveUserId(subscription: Stripe.Subscription): Promise<string 
   return user.id
 }
 
-async function syncSubscription(subscription: Stripe.Subscription) {
+async function syncSubscription(subscription: Stripe.Subscription, eventType: string) {
   const userId = await resolveUserId(subscription)
   if (!userId) return
 
   const item = subscription.items.data[0]
+  const currentPeriodEnd = item?.current_period_end
+    ? new Date(item.current_period_end * 1000)
+    : null
+  const cancelAt = subscription.cancel_at
+    ? new Date(subscription.cancel_at * 1000)
+    : null
 
-  await upsertSubscription({
-    userId,
-    stripeCustomerId: typeof subscription.customer === 'string'
-      ? subscription.customer
-      : subscription.customer.id,
+  const shared = {
     stripeSubscriptionId: subscription.id,
     status: subscription.status,
     priceId: item?.price?.id ?? null,
     amount: item?.price?.unit_amount ?? null,
     interval: item?.price?.recurring?.interval ?? null,
-    currentPeriodEnd: subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000)
-      : null,
+    currentPeriodEnd,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
-  })
+    cancelAt,
+  }
+
+  await Promise.all([
+    upsertSubscription({
+      userId,
+      stripeCustomerId: typeof subscription.customer === 'string'
+        ? subscription.customer
+        : subscription.customer.id,
+      ...shared,
+    }),
+    createSubscriptionHistoryEntry({
+      userId,
+      eventType,
+      ...shared,
+    }),
+  ])
 }
 
 export async function POST(request: Request) {
@@ -82,7 +98,8 @@ export async function POST(request: Request) {
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
       const subscription = event.data.object as Stripe.Subscription
-      await syncSubscription(subscription)
+      const eventType = event.type.replace('customer.subscription.', '')
+      await syncSubscription(subscription, eventType)
       break
     }
 

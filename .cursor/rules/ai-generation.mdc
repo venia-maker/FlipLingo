@@ -1,0 +1,58 @@
+---
+alwaysApply: true
+---
+# AI Flashcard Generation
+
+FlipLingo uses the **OpenAI SDK** (`openai` npm package) for AI-powered flashcard generation.
+
+## Setup
+
+- OpenAI API key stored in `.env` as `OPENAI_API_KEY`
+- Import `OpenAI` from `'openai'`
+- AI generation lives in a server action: `src/app/actions/ai-generate.ts`
+
+## Core Concept
+
+Cards are general-purpose Q&A: the front is a question and the back is an answer. This covers language learning (e.g. English→French), definitions, trivia, or any subject. The prompt should adapt based on the deck's title and description — it is NOT limited to language translation.
+
+## Implementation Pattern
+
+```ts
+import OpenAI from 'openai'
+
+const openai = new OpenAI()
+
+const prompt = `Generate exactly ${cardCount} flashcards for a deck titled "${deck.title}"${deck.description ? ` described as: "${deck.description}"` : ''}.
+The difficulty level is "${deck.difficulty}".
+
+Adjust content complexity based on the difficulty:
+- "low": basic, introductory-level questions and answers
+- "medium": intermediate knowledge, requires some familiarity
+- "high": advanced, specialized, or nuanced content
+- "mixed": a mix of all difficulty levels
+
+Each card has a "front" (question) and "back" (answer).
+Return a JSON array of exactly ${cardCount} objects with "front" and "back" keys. Only return the JSON array, no other text.`
+
+const completion = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: prompt }],
+  temperature: 0.8,
+})
+
+const content = completion.choices[0]?.message?.content
+const jsonMatch = content?.match(/\[[\s\S]*\]/)
+const generatedCards = JSON.parse(jsonMatch![0])
+```
+
+## Rules
+
+- Cards are not limited to language translation — they support any question-and-answer format.
+- The deck title and description drive what kind of cards are generated (language vocab, science definitions, history facts, etc.).
+- The number of cards (`cardCount`) must be between 10 and 30.
+- `difficulty` (`low`, `medium`, `high`, `mixed`) comes from the deck settings.
+- When a deck already has cards, include them in the prompt so AI generates different ones.
+- Keep AI generation logic in server actions — never call OpenAI from client components.
+- Never expose the OpenAI API key to the frontend.
+- AI generation requires a Pro subscription — enforce in the server action before calling OpenAI.
+- Handle generation errors gracefully — show user-friendly messages on failure.

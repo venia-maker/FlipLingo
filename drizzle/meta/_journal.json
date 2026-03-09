@@ -15,6 +15,20 @@
       "when": 1772965981814,
       "tag": "0001_add-subscriptions-table",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772996526772,
+      "tag": "0002_add-subscription-history",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773010697433,
+      "tag": "0003_aberrant_hercules",
+      "breakpoints": true
     }
   ]
 }

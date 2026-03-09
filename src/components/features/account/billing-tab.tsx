@@ -15,8 +15,19 @@ interface BillingTabProps {
   upgradeUrl: string
 }
 
+function formatDate(date: Date | string | null): string {
+  if (!date) return '—'
+  return new Date(date).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
 export function BillingTab({ subscription, upgradeUrl }: BillingTabProps) {
   const [loading, setLoading] = useState(false)
+  // Use cancelAt date if available (scheduled cancellation), otherwise currentPeriodEnd
+  const cancellationDate = subscription.cancelAt ?? subscription.currentPeriodEnd
 
   const handleManageBilling = async () => {
     setLoading(true)
@@ -50,11 +61,13 @@ export function BillingTab({ subscription, upgradeUrl }: BillingTabProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {subscription.isPro ? (
+          {subscription.isPro || subscription.cancelAtPeriodEnd ? (
             <>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Plan</span>
-                <span className="text-sm font-medium">Pro</span>
+                <span className="text-sm font-medium">
+                  {subscription.cancelAtPeriodEnd ? 'Pro (Canceling)' : 'Pro'}
+                </span>
               </div>
               <Separator />
               <div className="flex items-center justify-between">
@@ -66,23 +79,19 @@ export function BillingTab({ subscription, upgradeUrl }: BillingTabProps) {
               <Separator />
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Status</span>
-                <Badge variant="outline" className="capitalize">
-                  {subscription.status}
+                <Badge variant={subscription.cancelAtPeriodEnd ? 'destructive' : 'outline'} className="capitalize">
+                  {subscription.cancelAtPeriodEnd ? 'Pending cancellation' : subscription.status}
                 </Badge>
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
-                  {subscription.cancelAtPeriodEnd ? 'Expires on' : 'Next billing date'}
+                  {subscription.cancelAtPeriodEnd ? 'Access until' : 'Next billing date'}
                 </span>
                 <span className="text-sm font-medium">
-                  {subscription.currentPeriodEnd
-                    ? new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })
-                    : '—'}
+                  {subscription.cancelAtPeriodEnd
+                    ? formatDate(cancellationDate)
+                    : formatDate(subscription.currentPeriodEnd)}
                 </span>
               </div>
               {subscription.cancelAtPeriodEnd && (
@@ -95,13 +104,14 @@ export function BillingTab({ subscription, upgradeUrl }: BillingTabProps) {
                     <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
                       Your Pro plan will remain active until{' '}
                       <span className="font-medium">
-                        {subscription.currentPeriodEnd?.toLocaleDateString('en-US', {
-                          month: 'long',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
+                        {formatDate(cancellationDate) !== '—'
+                          ? formatDate(cancellationDate)
+                          : 'the end of your billing period'}
                       </span>
                       . After that, you&apos;ll be downgraded to the Free plan and only your first 3 decks will remain accessible.
+                    </p>
+                    <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                      Changed your mind? You can resubscribe anytime before your plan expires.
                     </p>
                     <Button
                       onClick={handleManageBilling}
@@ -128,7 +138,7 @@ export function BillingTab({ subscription, upgradeUrl }: BillingTabProps) {
           )}
         </CardContent>
         <CardFooter className="flex gap-3">
-          {subscription.isPro ? (
+          {subscription.isPro || subscription.cancelAtPeriodEnd ? (
             <Button onClick={handleManageBilling} disabled={loading} variant="outline">
               <ExternalLink className="mr-2 size-4" />
               {loading ? 'Redirecting...' : 'Manage billing'}

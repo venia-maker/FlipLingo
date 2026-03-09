@@ -7,10 +7,8 @@ import { getDeckById, getDecksByUserId } from '@/db/queries/decks'
 import { getCardsByDeckId } from '@/db/queries/cards'
 import { getUserSubscriptionStatus } from '@/app/actions/stripe'
 import { Header } from '@/components/features/header'
-import { CardList } from '@/components/features/decks/card-list'
 import { DeckActions } from '@/components/features/decks/deck-actions'
-import { AddCardDialog } from '@/components/features/decks/add-card-dialog'
-import { StudyButton } from '@/components/features/decks/study-button'
+import { DeckContent } from '@/components/features/decks/deck-content'
 import { Button } from '@/components/ui/button'
 
 const difficultyColors: Record<string, string> = {
@@ -82,19 +80,7 @@ export default async function DeckPage({ params }: DeckPageProps) {
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-sm text-zinc-500">
-            {cards.length} card{cards.length === 1 ? '' : 's'}
-          </p>
-          <div className="flex items-center gap-2">
-            <StudyButton deckId={id} cardCount={cards.length} />
-            <AddCardDialog deckId={id} />
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <CardList deckId={id} initialCards={cards} />
-        </div>
+        <DeckContent deckId={id} isPro={isPro} initialCards={cards} difficulty={deck.difficulty} hasDescription={!!deck.description} />
       </main>
     </div>
   )

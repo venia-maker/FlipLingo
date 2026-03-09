@@ -10,6 +10,7 @@ import {
   getCardById,
   updateCardById,
   hardDeleteCard,
+  hardDeleteCards,
 } from '@/db/queries/cards'
 import { getDeckById } from '@/db/queries/decks'
 
@@ -79,4 +80,19 @@ export async function deleteCardAction(cardId: string) {
 
   await hardDeleteCard(cardId)
   revalidatePath(`/deck/${card.deckId}`)
+}
+
+export async function deleteCardsAction(deckId: string, cardIds: string[]) {
+  if (cardIds.length === 0) return
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.getClaims()
+  if (error || !data?.claims?.sub) throw new Error('Unauthorized')
+
+  const userId = data.claims.sub as string
+  const deck = await getDeckById(deckId, userId)
+  if (!deck) throw new Error('Unauthorized')
+
+  await hardDeleteCards(cardIds)
+  revalidatePath(`/deck/${deckId}`)
 }
