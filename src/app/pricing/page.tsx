@@ -5,6 +5,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { UpgradeButton } from "@/components/features/pricing/upgrade-button";
+import { PricingBackButton } from "@/components/features/pricing/back-button";
 import { getUserSubscriptionStatus } from "@/app/actions/stripe";
 
 const PLANS = [
@@ -59,13 +60,20 @@ export default async function PricingPage() {
       </div>
 
       <main className="flex flex-1 flex-col items-center justify-center px-4 pt-24 pb-16">
-        <div className="mb-12 text-center">
-          <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-50">
-            Simple, transparent pricing
-          </h1>
-          <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400">
-            Start for free. Upgrade when you need more.
-          </p>
+        <div className="mb-12 w-full max-w-4xl">
+          {user && (
+            <div className="mb-6">
+              <PricingBackButton />
+            </div>
+          )}
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-50">
+              Simple, transparent pricing
+            </h1>
+            <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400">
+              Start for free. Upgrade when you need more.
+            </p>
+          </div>
         </div>
 
         <div className="grid w-full max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
