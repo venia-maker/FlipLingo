@@ -23,7 +23,7 @@ interface TasksListProps {
   tasks: Task[]
 }
 
-const POLL_INTERVAL_MS = 30_000
+const POLL_INTERVAL_MS = 10_000
 
 export function TasksList({ tasks }: TasksListProps) {
   const [statusMap, setStatusMap] = useState<Record<string, string>>({})
@@ -48,6 +48,7 @@ export function TasksList({ tasks }: TasksListProps) {
       }
     }
 
+    poll()
     const interval = setInterval(poll, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
   }, [zohoLinkedIds.join(',')])
