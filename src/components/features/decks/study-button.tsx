@@ -57,42 +57,70 @@ export function StudyButton({ deckId, cardCount }: StudyButtonProps) {
 
   if (state === 'completed') {
     return (
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
-          Completed · {pct}% correct
-        </span>
-        <Link href={`/deck/${deckId}/study`}>
-          <Button size="sm" variant="outline" onClick={handleReset}>
-            <RotateCcw className="size-4" />
-            Study Again
-          </Button>
-        </Link>
+      <div className="flex w-full flex-col gap-3 rounded-xl bg-emerald-50 p-4 dark:bg-emerald-950/20 sm:w-auto sm:min-w-[260px]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="size-2.5 rounded-full bg-emerald-500" />
+            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              Completed
+            </span>
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{pct}%</span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-emerald-200 dark:bg-emerald-900">
+          <div
+            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href={`/deck/${deckId}/study`} className="flex-1">
+            <Button size="sm" variant="outline" onClick={handleReset} className="w-full">
+              <RotateCcw className="size-4" />
+              Study Again
+            </Button>
+          </Link>
+        </div>
       </div>
     )
   }
 
   if (state === 'in-progress') {
     return (
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
-          In progress · {pct}% answered
-        </span>
-        <Link href={`/deck/${deckId}/study`}>
-          <Button size="sm" variant="default">
-            <Play className="size-4" />
-            Continue Learning
+      <div className="flex w-full flex-col gap-3 rounded-xl bg-amber-50 p-4 dark:bg-amber-950/20 sm:w-auto sm:min-w-[260px]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="size-2.5 animate-pulse rounded-full bg-amber-500" />
+            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              In Progress
+            </span>
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-amber-700 dark:text-amber-300">{pct}%</span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-amber-200 dark:bg-amber-900">
+          <div
+            className="h-full rounded-full bg-amber-500 transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href={`/deck/${deckId}/study`} className="flex-1">
+            <Button size="sm" variant="default" className="w-full">
+              <Play className="size-4" />
+              Continue Learning
+            </Button>
+          </Link>
+          <Button size="sm" variant="ghost" onClick={handleReset} title="Reset progress" className="size-9 shrink-0 p-0">
+            <RotateCcw className="size-4" />
           </Button>
-        </Link>
-        <Button size="sm" variant="ghost" onClick={handleReset} title="Reset progress">
-          <RotateCcw className="size-4" />
-        </Button>
+        </div>
       </div>
     )
   }
 
   return (
-    <Link href={`/deck/${deckId}/study`}>
-      <Button size="sm" variant="default">
+    <Link href={`/deck/${deckId}/study`} className="w-full sm:w-auto">
+      <Button variant="default" className="w-full gap-2 sm:w-auto">
         <Play className="size-4" />
         Start Learning
       </Button>

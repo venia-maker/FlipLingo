@@ -60,7 +60,11 @@ export function ProfileTab({ email, avatarUrl, fullName }: ProfileTabProps) {
       setMessage({ type: 'success', text: 'Avatar updated successfully.' })
       router.refresh()
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to upload avatar.' })
+      const raw = err instanceof Error ? err.message : 'Failed to upload avatar.'
+      const text = raw.includes('Bucket not found')
+        ? 'Avatar storage is not configured. Please contact support.'
+        : raw
+      setMessage({ type: 'error', text })
     } finally {
       setUploading(false)
     }
@@ -81,7 +85,11 @@ export function ProfileTab({ email, avatarUrl, fullName }: ProfileTabProps) {
       setMessage({ type: 'success', text: 'Profile updated successfully.' })
       router.refresh()
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update profile.' })
+      const raw = err instanceof Error ? err.message : 'Failed to update profile.'
+      const text = raw.includes('row-level security')
+        ? 'Unable to update profile. Please contact support.'
+        : raw
+      setMessage({ type: 'error', text })
     } finally {
       setSaving(false)
     }

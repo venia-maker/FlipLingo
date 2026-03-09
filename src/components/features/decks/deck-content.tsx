@@ -49,24 +49,44 @@ interface DeckContentProps {
   isPro: boolean
   initialCards: CardItem[]
   difficulty: Difficulty
+  hasDescription: boolean
 }
 
-export function DeckContent({ deckId, isPro, initialCards, difficulty }: DeckContentProps) {
+export function DeckContent({ deckId, isPro, initialCards, difficulty, hasDescription }: DeckContentProps) {
   const [isGenerating, setIsGenerating] = useState(false)
 
   return (
     <>
-      <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm text-zinc-500">
-          {initialCards.length} card{initialCards.length === 1 ? '' : 's'}
-        </p>
-        <div className="flex items-center gap-2">
+      <div className="mt-8 rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        {/* Top row: Card count + study progress */}
+        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex size-14 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-700">
+              <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{initialCards.length}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                {initialCards.length === 1 ? '1 Card' : `${initialCards.length} Cards`}
+              </span>
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                {initialCards.length === 0 ? 'Add cards to get started' : 'Ready to study'}
+              </span>
+            </div>
+          </div>
+          <StudyButton deckId={deckId} cardCount={initialCards.length} />
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-zinc-100 dark:border-zinc-800" />
+
+        {/* Bottom row: Actions */}
+        <div className="flex flex-wrap items-center justify-end gap-3 px-5 py-3.5">
           <GenerateCardsButton
             deckId={deckId}
             isPro={isPro}
+            hasDescription={hasDescription}
             onGeneratingChange={setIsGenerating}
           />
-          <StudyButton deckId={deckId} cardCount={initialCards.length} />
           <AddCardDialog deckId={deckId} />
         </div>
       </div>

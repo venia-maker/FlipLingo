@@ -27,12 +27,13 @@ import { generateCardsAction } from '@/app/actions/ai-generate'
 interface GenerateCardsButtonProps {
   deckId: string
   isPro: boolean
+  hasDescription: boolean
   onGeneratingChange: (isGenerating: boolean) => void
 }
 
 const CARD_COUNT_OPTIONS = [5, 10, 15, 20, 25, 30]
 
-export function GenerateCardsButton({ deckId, isPro, onGeneratingChange }: GenerateCardsButtonProps) {
+export function GenerateCardsButton({ deckId, isPro, hasDescription, onGeneratingChange }: GenerateCardsButtonProps) {
   const [open, setOpen] = useState(false)
   const [cardCount, setCardCount] = useState(20)
   const [isPending, startTransition] = useTransition()
@@ -53,8 +54,9 @@ export function GenerateCardsButton({ deckId, isPro, onGeneratingChange }: Gener
       try {
         const result = await generateCardsAction(deckId, cardCount)
         toast.success(`Generated ${result.count} cards with AI`)
-      } catch {
-        toast.error('Failed to generate cards. Please try again.')
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to generate cards.'
+        toast.error(message)
       } finally {
         onGeneratingChange(false)
       }
@@ -67,6 +69,24 @@ export function GenerateCardsButton({ deckId, isPro, onGeneratingChange }: Gener
       Generate with AI
     </Button>
   )
+
+  if (!hasDescription) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="sm" variant="outline" disabled={isPending} className="cursor-not-allowed">
+              <Sparkles className="size-4" />
+              Generate with AI
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Add a description to your deck first to enable AI generation.</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
+  }
 
   if (!isPro) {
     return (

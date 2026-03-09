@@ -1,9 +1,12 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 
 import { createClient } from '@/lib/supabase/server'
 import { getSubscriptionDetailsByUserId } from '@/app/actions/stripe'
 import { Header } from '@/components/features/header'
 import { AccountTabs } from '@/components/features/account/account-tabs'
+import { Button } from '@/components/ui/button'
 
 export default async function AccountPage() {
   const supabase = await createClient()
@@ -25,6 +28,13 @@ export default async function AccountPage() {
       </div>
 
       <main className="mx-auto w-full max-w-3xl px-4 py-8">
+        <Link href="/dashboard">
+          <Button variant="ghost" size="sm" className="mb-4">
+            <ArrowLeft className="size-4" />
+            Back to Dashboard
+          </Button>
+        </Link>
+
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
             Manage Account

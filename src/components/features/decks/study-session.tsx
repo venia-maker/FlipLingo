@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
-  RotateCcw,
   Check,
   X,
   Keyboard,
@@ -12,6 +11,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { StudyScore } from './study-score'
 
 interface StudyCard {
   id: string
@@ -146,95 +146,15 @@ export function StudySession({ deckId, deckTitle, cards }: StudySessionProps) {
 
   if (!card) return null
 
-  const correctCount = results.filter((r) => r === 'correct').length
-  const incorrectCount = results.filter((r) => r === 'incorrect').length
-  const answeredCount = correctCount + incorrectCount
-  const scorePercent = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0
-
   if (showScore) {
     return (
-      <div className="flex flex-col items-center">
-        <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-          Session Complete!
-        </h2>
-        <p className="mt-2 text-zinc-500">{deckTitle}</p>
-
-        <div className="mt-8 flex items-center justify-center">
-          <div className="relative size-40">
-            <svg className="size-full -rotate-90" viewBox="0 0 100 100">
-              <circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="8"
-                className="text-zinc-200 dark:text-zinc-800"
-              />
-              <circle
-                cx="50"
-                cy="50"
-                r="42"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="8"
-                strokeDasharray={`${(scorePercent / 100) * 264} 264`}
-                strokeLinecap="round"
-                className={
-                  scorePercent >= 70
-                    ? 'text-green-500'
-                    : scorePercent >= 40
-                      ? 'text-yellow-500'
-                      : 'text-red-500'
-                }
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">
-                {scorePercent}%
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <div className="size-3 rounded-full bg-green-500" />
-            <span className="text-sm text-zinc-600 dark:text-zinc-400">
-              {correctCount} correct
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="size-3 rounded-full bg-red-500" />
-            <span className="text-sm text-zinc-600 dark:text-zinc-400">
-              {incorrectCount} incorrect
-            </span>
-          </div>
-        </div>
-
-        <p className="mt-4 text-sm text-zinc-500">
-          {scorePercent === 100
-            ? 'Perfect score! Amazing work!'
-            : scorePercent >= 70
-              ? 'Great job! Keep practicing to improve.'
-              : scorePercent >= 40
-                ? 'Good effort! Review the cards you missed.'
-                : 'Keep studying — you\'ll get there!'}
-        </p>
-
-        <div className="mt-6 flex items-center gap-3">
-          <Button variant="outline" onClick={restart}>
-            <RotateCcw className="size-4" />
-            Study Again
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={`/deck/${deckId}`}>
-              <ChevronLeft className="size-4" />
-              Back to Deck
-            </a>
-          </Button>
-        </div>
-      </div>
+      <StudyScore
+        deckId={deckId}
+        deckTitle={deckTitle}
+        cards={cards}
+        results={results}
+        onRestart={restart}
+      />
     )
   }
 

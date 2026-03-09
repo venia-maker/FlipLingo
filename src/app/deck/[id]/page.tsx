@@ -80,7 +80,7 @@ export default async function DeckPage({ params }: DeckPageProps) {
           </div>
         </div>
 
-        <DeckContent deckId={id} isPro={isPro} initialCards={cards} difficulty={deck.difficulty} />
+        <DeckContent deckId={id} isPro={isPro} initialCards={cards} difficulty={deck.difficulty} hasDescription={!!deck.description} />
       </main>
     </div>
   )

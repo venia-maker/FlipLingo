@@ -44,6 +44,20 @@ export async function insertCard(values: {
   return newCard
 }
 
+export async function insertCards(values: Array<{
+  deckId: string
+  front: string
+  back: string
+  position: number
+}>) {
+  return db.insert(cards).values(values).returning({
+    id: cards.id,
+    front: cards.front,
+    back: cards.back,
+    position: cards.position,
+  })
+}
+
 export async function updateCardById(
   cardId: string,
   values: { front?: string; back?: string; position?: number },

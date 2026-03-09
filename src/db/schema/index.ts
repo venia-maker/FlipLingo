@@ -6,3 +6,6 @@ export {
   subscriptionHistory,
   subscriptionHistoryRelations,
 } from './subscriptions'
+export { zohoIntegrations } from './zoho-integrations'
+export { studySessions, studySessionsRelations } from './study-sessions'
+export { tasks, tasksRelations } from './tasks'
