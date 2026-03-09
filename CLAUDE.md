@@ -1,5 +1,10 @@
 # FlipLingo — CLAUDE.md
 
+## Mandatory Pre-Implementation Gate
+Before ANY creative work — creating features, building components, adding functionality, or modifying behavior — you MUST invoke the `/brainstorming` skill first. Do NOT write code, scaffold files, or begin implementation until the brainstorming process is complete and the user has approved the design. This applies to every task regardless of perceived simplicity.
+
+---
+
 ## Project Overview
 FlipLingo is a general-purpose flashcard SaaS. Each card has a front (question) and a back (answer). Cards can be used for any subject — language learning (e.g. English question → French answer), general knowledge (e.g. "What is photosynthesis?" → definition), or any Q&A format. The app is not tied to languages; it supports any question-and-answer use case. Users create decks, study via flip cards, track progress, and unlock premium features via Stripe subscriptions. Future: spaced repetition, AI-generated decks.
 
