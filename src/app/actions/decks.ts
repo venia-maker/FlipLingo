@@ -74,9 +74,9 @@ export async function deleteDeckAction(deckId: string) {
   if (error || !data?.claims?.sub) throw new Error('Unauthorized')
 
   const userId = data.claims.sub as string
-  await hardDeleteCardsByDeckId(deckId)
+  await hardDeleteCardsByDeckId(deckId, userId)
   const deleted = await hardDeleteDeck(deckId, userId)
-  if (!deleted) throw new Error('Deck not found')
+  if (!deleted) throw new Error('Not found')
 
   revalidatePath('/dashboard')
   redirect('/dashboard')

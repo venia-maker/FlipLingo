@@ -20,26 +20,30 @@ export async function reorderCardsAction(
 ) {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims?.sub) throw new Error('Unauthorized')
+  if (error || !data?.claims?.sub) throw new Error('Not found')
 
-  await reorderCards(cardPositions)
+  const userId = data.claims.sub as string
+  const deck = await getDeckById(deckId, userId)
+  if (!deck) throw new Error('Not found')
+
+  await reorderCards(deckId, userId, cardPositions)
   revalidatePath(`/deck/${deckId}`)
 }
 
 export async function addCardAction(deckId: string, formData: FormData) {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims?.sub) throw new Error('Unauthorized')
+  if (error || !data?.claims?.sub) throw new Error('Not found')
 
   const userId = data.claims.sub as string
   const deck = await getDeckById(deckId, userId)
-  if (!deck) throw new Error('Deck not found')
+  if (!deck) throw new Error('Not found')
 
   const front = formData.get('front') as string
   const back = formData.get('back') as string
   if (!front || !back) throw new Error('Invalid input')
 
-  const existingCards = await getCardsByDeckId(deckId)
+  const existingCards = await getCardsByDeckId(deckId, userId)
   const nextPosition = existingCards.length
 
   await insertCard({ deckId, front, back, position: nextPosition })
@@ -49,36 +53,30 @@ export async function addCardAction(deckId: string, formData: FormData) {
 export async function updateCardAction(cardId: string, formData: FormData) {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims?.sub) throw new Error('Unauthorized')
+  if (error || !data?.claims?.sub) throw new Error('Not found')
 
   const userId = data.claims.sub as string
-  const card = await getCardById(cardId)
-  if (!card) throw new Error('Card not found')
-
-  const deck = await getDeckById(card.deckId, userId)
-  if (!deck) throw new Error('Unauthorized')
+  const card = await getCardById(cardId, userId)
+  if (!card) throw new Error('Not found')
 
   const front = formData.get('front') as string
   const back = formData.get('back') as string
   if (!front || !back) throw new Error('Invalid input')
 
-  await updateCardById(cardId, { front, back })
+  await updateCardById(cardId, userId, { front, back })
   revalidatePath(`/deck/${card.deckId}`)
 }
 
 export async function deleteCardAction(cardId: string) {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims?.sub) throw new Error('Unauthorized')
+  if (error || !data?.claims?.sub) throw new Error('Not found')
 
   const userId = data.claims.sub as string
-  const card = await getCardById(cardId)
-  if (!card) throw new Error('Card not found')
+  const card = await getCardById(cardId, userId)
+  if (!card) throw new Error('Not found')
 
-  const deck = await getDeckById(card.deckId, userId)
-  if (!deck) throw new Error('Unauthorized')
-
-  await hardDeleteCard(cardId)
+  await hardDeleteCard(cardId, userId)
   revalidatePath(`/deck/${card.deckId}`)
 }
 
@@ -87,12 +85,12 @@ export async function deleteCardsAction(deckId: string, cardIds: string[]) {
 
   const supabase = await createClient()
   const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims?.sub) throw new Error('Unauthorized')
+  if (error || !data?.claims?.sub) throw new Error('Not found')
 
   const userId = data.claims.sub as string
   const deck = await getDeckById(deckId, userId)
-  if (!deck) throw new Error('Unauthorized')
+  if (!deck) throw new Error('Not found')
 
-  await hardDeleteCards(cardIds)
+  await hardDeleteCards(deckId, userId, cardIds)
   revalidatePath(`/deck/${deckId}`)
 }

@@ -1,12 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 
 import { exchangeZohoCode } from '@/app/actions/zoho'
 
 export default function ZohoOAuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+          <Loader2 className="size-10 animate-spin text-zinc-500" />
+        </div>
+      }
+    >
+      <ZohoOAuthContent />
+    </Suspense>
+  )
+}
+
+function ZohoOAuthContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')

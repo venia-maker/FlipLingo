@@ -1,7 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
+import { ClipboardList } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { CardList } from './card-list'
 import { GenerateCardsButton } from './generate-cards-button'
 import { StudyButton } from './study-button'
@@ -50,9 +53,10 @@ interface DeckContentProps {
   initialCards: CardItem[]
   difficulty: Difficulty
   hasDescription: boolean
+  taskCount: number
 }
 
-export function DeckContent({ deckId, isPro, initialCards, difficulty, hasDescription }: DeckContentProps) {
+export function DeckContent({ deckId, isPro, initialCards, difficulty, hasDescription, taskCount }: DeckContentProps) {
   const [isGenerating, setIsGenerating] = useState(false)
 
   return (
@@ -88,6 +92,14 @@ export function DeckContent({ deckId, isPro, initialCards, difficulty, hasDescri
             onGeneratingChange={setIsGenerating}
           />
           <AddCardDialog deckId={deckId} />
+          {taskCount > 0 && (
+            <Link href={`/tasks?deck=${deckId}`}>
+              <Button variant="outline" size="sm">
+                <ClipboardList className="size-4" />
+                View Tasks ({taskCount})
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 

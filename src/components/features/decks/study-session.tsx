@@ -195,23 +195,23 @@ export function StudySession({ deckId, deckTitle, cards }: StudySessionProps) {
         onClick={() => setIsFlipped((f) => !f)}
       >
         <div
-          className={`relative h-64 w-full transition-transform duration-500 [transform-style:preserve-3d] ${
+          className={`relative min-h-64 w-full transition-transform duration-500 [transform-style:preserve-3d] ${
             isFlipped ? '[transform:rotateY(180deg)]' : ''
           }`}
         >
-          <Card className="absolute inset-0 flex flex-col items-center justify-center p-8 [backface-visibility:hidden]">
-            <span className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
+          <Card className="absolute inset-0 flex flex-col items-center justify-center overflow-y-auto p-8 [backface-visibility:hidden]">
+            <span className="mb-2 shrink-0 text-xs font-medium uppercase tracking-wider text-zinc-400">
               Front
             </span>
             <p className="text-center text-2xl font-medium text-zinc-900 dark:text-zinc-50">
               {card.front}
             </p>
           </Card>
-          <Card className="absolute inset-0 flex flex-col items-center justify-center p-8 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-            <span className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
+          <Card className="flex min-h-64 flex-col items-center justify-center overflow-y-auto p-8 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+            <span className="mb-2 shrink-0 text-xs font-medium uppercase tracking-wider text-zinc-400">
               Back
             </span>
-            <p className="text-center text-2xl font-medium text-zinc-900 dark:text-zinc-50">
+            <p className="text-center text-lg font-medium leading-relaxed text-zinc-900 dark:text-zinc-50">
               {card.back}
             </p>
           </Card>

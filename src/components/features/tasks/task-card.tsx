@@ -126,7 +126,7 @@ export function TaskCard({ task, externalStatus }: TaskCardProps) {
               {task.subject}
             </h3>
             <p className="mt-1 line-clamp-2 text-sm text-zinc-500 dark:text-zinc-400">
-              {task.description}
+              {task.description.replace(/\*\*(.+?)\*\*/g, '$1').replace(/^• /gm, '· ')}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge
@@ -190,9 +190,14 @@ export function TaskCard({ task, externalStatus }: TaskCardProps) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="whitespace-pre-wrap rounded-lg bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300">
-            {task.description}
-          </div>
+          <div
+            className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-4 text-sm leading-relaxed text-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300"
+            dangerouslySetInnerHTML={{
+              __html: task.description
+                .replace(/\*\*(.+?)\*\*/g, '<strong class="block mt-3 mb-1 text-zinc-900 dark:text-zinc-100">$1</strong>')
+                .replace(/^• (.+)$/gm, '<span class="ml-4 block py-0.5">• $1</span>')
+            }}
+          />
 
           {task.zohoTicketId && (
             <p className="text-xs text-zinc-400">

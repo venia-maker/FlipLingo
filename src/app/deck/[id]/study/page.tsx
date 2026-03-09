@@ -24,7 +24,7 @@ export default async function StudyPage({ params }: StudyPageProps) {
 
   const [deck, cards] = await Promise.all([
     getDeckById(id, userId),
-    getCardsByDeckId(id),
+    getCardsByDeckId(id, userId),
   ])
   if (!deck) redirect('/dashboard')
   if (cards.length === 0) redirect(`/deck/${id}`)

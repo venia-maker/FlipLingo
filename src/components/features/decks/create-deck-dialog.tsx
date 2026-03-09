@@ -71,7 +71,7 @@ export function CreateDeckDialog({ deckCount, isPro = false }: { deckCount: numb
                   await createDeckAction(formData)
                   toast.success('Deck created successfully')
                 } catch (err) {
-                  if (err instanceof Error && (err.message === 'NEXT_REDIRECT' || (err as Record<string, unknown>).digest?.toString().startsWith('NEXT_REDIRECT'))) {
+                  if (err instanceof Error && (err.message === 'NEXT_REDIRECT' || (err as unknown as Record<string, unknown>).digest?.toString().startsWith('NEXT_REDIRECT'))) {
                     toast.success('Deck created successfully')
                     return
                   }

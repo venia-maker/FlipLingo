@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getDeckById, getDecksByUserId } from '@/db/queries/decks'
 import { getCardsByDeckId } from '@/db/queries/cards'
+import { getTaskCountsByDeckIds } from '@/db/queries/tasks'
 import { getUserSubscriptionStatus } from '@/app/actions/stripe'
 import { Header } from '@/components/features/header'
 import { DeckActions } from '@/components/features/decks/deck-actions'
@@ -46,7 +47,11 @@ export default async function DeckPage({ params }: DeckPageProps) {
     }
   }
 
-  const cards = await getCardsByDeckId(id)
+  const [cards, taskCounts] = await Promise.all([
+    getCardsByDeckId(id, userId),
+    getTaskCountsByDeckIds(userId, [id]),
+  ])
+  const taskCount = taskCounts[id] ?? 0
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -80,7 +85,7 @@ export default async function DeckPage({ params }: DeckPageProps) {
           </div>
         </div>
 
-        <DeckContent deckId={id} isPro={isPro} initialCards={cards} difficulty={deck.difficulty} hasDescription={!!deck.description} />
+        <DeckContent deckId={id} isPro={isPro} initialCards={cards} difficulty={deck.difficulty} hasDescription={!!deck.description} taskCount={taskCount} />
       </main>
     </div>
   )

@@ -11,7 +11,6 @@ import { getDeckById } from '@/db/queries/decks'
 import {
   insertTask,
   getTasksByUserId,
-  getTaskCountByUserId,
   getTaskById,
   getTaskStatusesByIds,
   updateTask,
@@ -43,6 +42,14 @@ function getPriorityFromScore(scorePercent: number): string {
   return 'low'
 }
 
+function toHtml(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/^• (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`)
+    .replace(/\n/g, '<br>')
+}
+
 function formatCardResults(cardResults: unknown): string {
   const results = cardResults as Array<{
     front: string
@@ -58,14 +65,30 @@ function formatCardResults(cardResults: unknown): string {
     .join('\n')
 }
 
+function formatCardResultsHtml(cardResults: unknown): string {
+  const results = cardResults as Array<{
+    front: string
+    back: string
+    correct: boolean
+  }>
+
+  return results
+    .map((r, i) => {
+      const color = r.correct ? 'green' : 'red'
+      const marker = r.correct ? '✓' : '✗'
+      return `<span style="color:${color}">${marker}</span> ${i + 1}. Q: ${r.front} | A: ${r.back}`
+    })
+    .join('<br>')
+}
+
 export async function createAITask(studySessionId: string) {
   const { id: userId, email } = await getAuthenticatedUser()
 
   const session = await getStudySessionById(studySessionId, userId)
-  if (!session) throw new Error('Study session not found')
+  if (!session) throw new Error('Not found')
 
   const deck = await getDeckById(session.deckId, userId)
-  if (!deck) throw new Error('Deck not found')
+  if (!deck) throw new Error('Not found')
 
   const cardResults = session.cardResults as Array<{ front: string; back: string; correct: boolean }>
   const incorrectCards = cardResults.filter((c) => !c.correct)
@@ -80,7 +103,21 @@ export async function createAITask(studySessionId: string) {
     '',
     'Generate a JSON object with:',
     '- "subject": A short task title (max 80 chars) summarizing what to review',
-    '- "description": A helpful review plan (3-5 bullet points) with specific suggestions on what to study, focusing on the missed cards and patterns in mistakes. Be encouraging but actionable.',
+    '- "description": A detailed, well-formatted review plan using this structure:',
+    '',
+    '  **Summary**',
+    '  A 2-3 sentence overview of how the session went and what needs attention.',
+    '',
+    '  **Key Takeaways**',
+    '  • 2-3 key insights about what the student knows well or patterns in their mistakes.',
+    '',
+    '  **Action Items**',
+    '  • 3-5 specific, actionable study tasks. Each should be a full sentence explaining what to do and why.',
+    '',
+    '  **Tips**',
+    '  • 1-2 study technique suggestions relevant to the material.',
+    '',
+    '  Use newlines (\\n) to separate sections and bullet points. Use ** for bold section headers. Be encouraging but specific.',
   ].join('\n')
 
   const completion = await openai.chat.completions.create({
@@ -88,7 +125,7 @@ export async function createAITask(studySessionId: string) {
     temperature: 0.7,
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: 'You are a study coach. Respond only with valid JSON containing "subject" and "description" fields.' },
+      { role: 'system', content: 'You are an expert study coach. Respond only with valid JSON containing "subject" and "description" fields. The description must use \\n for line breaks between sections and bullet points. Use ** for bold section headers. Never use commas to separate distinct points — always use newlines.' },
       { role: 'user', content: prompt },
     ],
   })
@@ -113,7 +150,7 @@ export async function createAITask(studySessionId: string) {
             method: 'POST',
             body: {
               subject: parsed.subject,
-              description: parsed.description,
+              description: toHtml(parsed.description),
               departmentId: departments.data[0].id,
               contact: { email },
               priority: priority.charAt(0).toUpperCase() + priority.slice(1),
@@ -158,12 +195,12 @@ export async function createZohoTask(studySessionId: string) {
 
   const session = await getStudySessionById(studySessionId, userId)
   if (!session) {
-    throw new Error('Study session not found')
+    throw new Error('Not found')
   }
 
   const deck = await getDeckById(session.deckId, userId)
   if (!deck) {
-    throw new Error('Deck not found')
+    throw new Error('Not found')
   }
 
   const dateStr = new Date().toLocaleDateString('en-US', {
@@ -187,6 +224,16 @@ export async function createZohoTask(studySessionId: string) {
     formatCardResults(session.cardResults),
   ].join('\n')
 
+  const zohoDescription = [
+    `<b>Study Session Summary for "${deck.title}"</b><br>`,
+    `<b>Date:</b> ${dateStr}<br>`,
+    `<b>Score:</b> ${session.scorePercent}%<br>`,
+    `<b>Correct:</b> ${session.correctCount}/${session.totalCards}<br>`,
+    `<b>Incorrect:</b> ${session.incorrectCount}/${session.totalCards}<br>`,
+    '<br><b>Card-by-Card Results:</b><br>',
+    formatCardResultsHtml(session.cardResults),
+  ].join('')
+
   // Zoho Desk requires departmentId and contactId when creating tickets
   const departments = await zohoFetch<{ data: { id: string }[] }>(userId, '/departments')
   if (!departments.data?.length) {
@@ -198,7 +245,7 @@ export async function createZohoTask(studySessionId: string) {
     method: 'POST',
     body: {
       subject,
-      description,
+      description: zohoDescription,
       departmentId,
       contact: { email },
       priority: priority.charAt(0).toUpperCase() + priority.slice(1),
@@ -232,7 +279,7 @@ export async function closeTaskAction(taskId: string) {
   const userId = await getAuthenticatedUserId()
 
   const task = await getTaskById(taskId, userId)
-  if (!task) throw new Error('Task not found')
+  if (!task) throw new Error('Not found')
 
   // Update locally
   await updateTask(taskId, userId, { status: 'closed' })
@@ -262,7 +309,7 @@ export async function syncTaskStatus(taskId: string) {
 
   const task = await getTaskById(taskId, userId)
   if (!task || !task.zohoTicketId) {
-    throw new Error('Task not found or not linked to Zoho')
+    throw new Error('Not found')
   }
 
   const ticket = await zohoFetch<{ status: string }>(

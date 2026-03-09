@@ -28,10 +28,10 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
         <Header user={{ email }} />
       </div>
       <main className="mx-auto max-w-3xl px-6 py-12">
-        <Link href="/dashboard">
+        <Link href={deckId ? `/deck/${deckId}` : '/dashboard'}>
           <Button variant="ghost" size="sm" className="mb-4">
             <ArrowLeft className="size-4" />
-            Back to Dashboard
+            {deckId ? 'Back to Deck' : 'Back to Dashboard'}
           </Button>
         </Link>
 

@@ -10,16 +10,20 @@ import { Button } from '@/components/ui/button'
 
 export default async function AccountPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data, error } = await supabase.auth.getClaims()
 
-  if (!user) {
+  if (error || !data?.claims) {
     redirect('/')
   }
 
-  const email = user.email ?? ''
-  const avatarUrl = (user.user_metadata?.avatar_url as string) ?? null
-  const fullName = (user.user_metadata?.full_name as string) ?? null
-  const subscription = await getSubscriptionDetailsByUserId(user.id)
+  const userId = data.claims.sub as string
+  const email = typeof data.claims.email === 'string' ? data.claims.email : ''
+
+  // Fetch full user metadata only when needed for display
+  const { data: { user } } = await supabase.auth.getUser()
+  const avatarUrl = (user?.user_metadata?.avatar_url as string) ?? null
+  const fullName = (user?.user_metadata?.full_name as string) ?? null
+  const subscription = await getSubscriptionDetailsByUserId(userId)
 
   return (
     <div className="relative flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950">

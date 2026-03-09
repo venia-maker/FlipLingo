@@ -29,11 +29,11 @@ export async function generateCardsAction(deckId: string, cardCount: number) {
   if (!isPro) throw new Error('AI generation requires a Pro subscription')
 
   const deck = await getDeckById(deckId, userId)
-  if (!deck) throw new Error('Deck not found')
+  if (!deck) throw new Error('Not found')
 
   if (!deck.description) throw new Error('Deck must have a description for AI generation')
 
-  const existingCards = await getCardsByDeckId(deckId)
+  const existingCards = await getCardsByDeckId(deckId, userId)
 
   const prompt = `Generate exactly ${cardCount} flashcards for a deck titled "${deck.title}" described as: "${deck.description}".
 
