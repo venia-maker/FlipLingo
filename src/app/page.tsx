@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Check } from 'lucide-react'
 import { Header } from '@/components/features/header'
 import { AuthDialog } from '@/components/features/auth/auth-dialog'
@@ -12,6 +12,23 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+
+const SAMPLE_CARDS = [
+  { front: 'What is photosynthesis?', back: 'The process by which plants convert sunlight, water, and CO\u2082 into glucose and oxygen.' },
+  { front: 'What is the capital of Japan?', back: 'Tokyo \u2014 the most populous metropolitan area in the world.' },
+  { front: '\u00bfC\u00f3mo se dice "hello" en espa\u00f1ol?', back: '\u00abHola\u00bb \u2014 used as an informal greeting.' },
+  { front: 'What is the Pythagorean theorem?', back: 'a\u00b2 + b\u00b2 = c\u00b2 \u2014 relates the sides of a right triangle.' },
+  { front: 'What does DNA stand for?', back: 'Deoxyribonucleic acid \u2014 the molecule that carries genetic instructions.' },
+  { front: 'Who wrote "1984"?', back: 'George Orwell \u2014 published in 1949 as a dystopian novel.' },
+  { front: 'What is Newton\u2019s First Law?', back: 'An object at rest stays at rest, and an object in motion stays in motion, unless acted on by an external force.' },
+  { front: 'What is the speed of light?', back: 'Approximately 299,792,458 meters per second in a vacuum.' },
+  { front: 'Translate "thank you" to French', back: '\u00abMerci\u00bb \u2014 or \u00abmerci beaucoup\u00bb for "thank you very much."' },
+  { front: 'What is the powerhouse of the cell?', back: 'The mitochondria \u2014 responsible for producing ATP through cellular respiration.' },
+  { front: 'What year did World War II end?', back: '1945 \u2014 with the surrender of Germany in May and Japan in September.' },
+  { front: 'What is the chemical formula for water?', back: 'H\u2082O \u2014 two hydrogen atoms bonded to one oxygen atom.' },
+]
+
+const CYCLE_INTERVAL_MS = 5_000
 
 const PLANS = [
   {
@@ -49,6 +66,25 @@ export default function Home() {
   const [authView, setAuthView] = useState<'login' | 'signup'>('signup')
   const [pricingOpen, setPricingOpen] = useState(false)
   const [flipped, setFlipped] = useState(false)
+  const [cardIndex, setCardIndex] = useState(0)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+
+  const cycleToNextCard = useCallback(() => {
+    setIsTransitioning(true)
+    // If card is flipped, flip it back first, then change card
+    setFlipped(false)
+    setTimeout(() => {
+      setCardIndex((prev) => (prev + 1) % SAMPLE_CARDS.length)
+      setIsTransitioning(false)
+    }, 300)
+  }, [])
+
+  useEffect(() => {
+    const interval = setInterval(cycleToNextCard, CYCLE_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [cycleToNextCard])
+
+  const currentCard = SAMPLE_CARDS[cardIndex]
 
   const openSignUp = () => {
     setAuthView('signup')
@@ -100,15 +136,18 @@ export default function Home() {
         <div className="mt-16 mb-12 w-full max-w-md [perspective:1000px]">
           <button
             onClick={() => setFlipped((f) => !f)}
-            className="relative mx-auto h-56 w-full cursor-pointer [transform-style:preserve-3d] transition-transform duration-500"
-            style={{ transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
+            className={`relative mx-auto h-56 w-full cursor-pointer [transform-style:preserve-3d] transition-transform duration-500 ${isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
+            style={{
+              transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+              transition: 'transform 500ms, opacity 300ms, scale 300ms',
+            }}
             aria-label={flipped ? 'Show question' : 'Show answer'}
           >
             {/* Front */}
             <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-zinc-200 bg-white p-8 shadow-xl [backface-visibility:hidden] dark:border-zinc-800 dark:bg-zinc-900">
               <p className="text-sm font-medium tracking-wide text-zinc-400 uppercase">Front</p>
               <p className="mt-3 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-                What is photosynthesis?
+                {currentCard.front}
               </p>
               <span className="absolute -right-3 -bottom-3 rounded-2xl border border-zinc-200 bg-zinc-100 px-4 py-2 text-xs text-zinc-500 shadow dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
                 Tap to flip
@@ -118,13 +157,23 @@ export default function Home() {
             <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 p-8 shadow-xl [backface-visibility:hidden] [transform:rotateY(180deg)] dark:border-emerald-800 dark:bg-emerald-950">
               <p className="text-sm font-medium tracking-wide text-emerald-500 uppercase">Back</p>
               <p className="mt-3 text-center text-lg font-medium text-zinc-800 dark:text-zinc-100">
-                The process by which plants convert sunlight, water, and CO₂ into glucose and oxygen.
+                {currentCard.back}
               </p>
               <span className="absolute -right-3 -bottom-3 rounded-2xl border border-emerald-200 bg-emerald-100 px-4 py-2 text-xs text-emerald-600 shadow dark:border-emerald-800 dark:bg-emerald-900 dark:text-emerald-400">
                 Tap to flip back
               </span>
             </div>
           </button>
+          <div className="mt-6 flex justify-center gap-1.5">
+            {SAMPLE_CARDS.map((_, i) => (
+              <span
+                key={i}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === cardIndex ? 'w-6 bg-emerald-500' : 'w-1.5 bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              />
+            ))}
+          </div>
         </div>
       </section>
 

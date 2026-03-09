@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
-import { getSubscriptionByUserId, upsertSubscription, createSubscriptionHistoryEntry } from '@/db/queries/subscriptions'
+import { getSubscriptionByUserId, upsertSubscription, createSubscriptionHistoryEntry, deleteSubscriptionByUserId } from '@/db/queries/subscriptions'
 
 async function getBaseUrl(): Promise<string> {
   const h = await headers()
@@ -206,13 +206,24 @@ export async function getUserSubscriptionDetails(email: string): Promise<Subscri
 export async function syncSubscriptionFromStripe(userId: string, email: string): Promise<void> {
   try {
     const customers = await stripe.customers.list({ email, limit: 1 })
-    if (customers.data.length === 0) return
+    if (customers.data.length === 0) {
+      // No Stripe customer — clean up any stale DB record
+      await deleteSubscriptionByUserId(userId)
+      return
+    }
 
+    // Fetch all subscriptions (including canceled) to get accurate status
     const subs = await stripe.subscriptions.list({
       customer: customers.data[0].id,
       limit: 1,
     })
-    if (subs.data.length === 0) return
+
+    if (subs.data.length === 0) {
+      // No active subscription found — the subscription was fully canceled.
+      // Delete the stale DB record so the user is correctly shown as Free.
+      await deleteSubscriptionByUserId(userId)
+      return
+    }
 
     const sub = subs.data[0]
     const item = sub.items.data[0]
@@ -242,7 +253,7 @@ export async function syncSubscriptionFromStripe(userId: string, email: string):
       }),
       createSubscriptionHistoryEntry({
         userId,
-        eventType: 'checkout_sync',
+        eventType: 'sync',
         ...shared,
       }),
     ])

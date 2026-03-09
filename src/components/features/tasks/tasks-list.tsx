@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-import { getTaskStatuses } from '@/app/actions/tasks'
+import { syncZohoTaskStatuses } from '@/app/actions/tasks'
 import { TaskCard } from './task-card'
 
 interface Task {
@@ -37,7 +37,7 @@ export function TasksList({ tasks }: TasksListProps) {
 
     async function poll() {
       try {
-        const statuses = await getTaskStatuses(zohoLinkedIds)
+        const statuses = await syncZohoTaskStatuses(zohoLinkedIds)
         const map: Record<string, string> = {}
         for (const s of statuses) {
           map[s.id] = s.status
@@ -48,6 +48,7 @@ export function TasksList({ tasks }: TasksListProps) {
       }
     }
 
+    // Sync immediately on mount, then poll on interval
     poll()
     const interval = setInterval(poll, POLL_INTERVAL_MS)
     return () => clearInterval(interval)

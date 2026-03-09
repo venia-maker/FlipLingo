@@ -328,3 +328,31 @@ export async function getTaskStatuses(taskIds: string[]) {
   const userId = await getAuthenticatedUserId()
   return getTaskStatusesByIds(userId, taskIds)
 }
+
+export async function syncZohoTaskStatuses(taskIds: string[]): Promise<Array<{ id: string; status: string }>> {
+  const userId = await getAuthenticatedUserId()
+
+  const syncPromises = taskIds.map(async (taskId) => {
+    try {
+      const task = await getTaskById(taskId, userId)
+      if (!task || !task.zohoTicketId) return null
+
+      const ticket = await zohoFetch<{ status: string }>(
+        userId,
+        `/tickets/${task.zohoTicketId}`,
+      )
+
+      const newStatus = ticket.status.toLowerCase()
+      if (newStatus !== task.status) {
+        await updateTask(taskId, userId, { status: newStatus })
+      }
+
+      return { id: taskId, status: newStatus }
+    } catch {
+      return null
+    }
+  })
+
+  const results = await Promise.all(syncPromises)
+  return results.filter((r): r is { id: string; status: string } => r !== null)
+}

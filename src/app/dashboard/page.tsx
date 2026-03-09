@@ -14,7 +14,7 @@ import { getUserSubscriptionStatus, syncSubscriptionFromStripe } from '@/app/act
 
 const FREE_DECK_LIMIT = 3
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ checkout?: string }> }) {
+export default async function DashboardPage() {
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.getClaims()
@@ -25,9 +25,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const email = typeof data.claims.email === 'string' ? data.claims.email : ''
   const userId = data.claims.sub as string
 
-  // After checkout, sync subscription from Stripe before reading status
-  const params = await searchParams
-  if (params.checkout === 'success' && email) {
+  // Always sync subscription from Stripe to ensure accurate plan status
+  // (handles webhook failures, portal downgrades, and cancellations)
+  if (email) {
     await syncSubscriptionFromStripe(userId, email)
   }
 
