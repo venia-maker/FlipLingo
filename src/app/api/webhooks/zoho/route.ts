@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 
 import { updateTaskByZohoTicketId } from '@/db/queries/tasks'
 
@@ -49,6 +50,11 @@ export async function POST(request: NextRequest) {
         status: data.status.toLowerCase(),
       })
       updated++
+    }
+
+    if (updated > 0) {
+      revalidatePath('/tasks')
+      revalidatePath('/deck')
     }
 
     return NextResponse.json({ success: true, updated })
