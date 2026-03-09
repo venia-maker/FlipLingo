@@ -1,9 +1,18 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
 import { getSubscriptionByUserId, upsertSubscription, createSubscriptionHistoryEntry } from '@/db/queries/subscriptions'
+
+async function getBaseUrl(): Promise<string> {
+  const h = await headers()
+  const host = h.get('host')
+  const proto = h.get('x-forwarded-proto') ?? 'https'
+  if (host) return `${proto}://${host}`
+  return process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+}
 
 export interface SubscriptionDetails {
   isPro: boolean
@@ -202,9 +211,10 @@ export async function createBillingPortalSession() {
     throw new Error('No Stripe customer found')
   }
 
+  const baseUrl = await getBaseUrl()
   const session = await stripe.billingPortal.sessions.create({
     customer: customers.data[0].id,
-    return_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/account`,
+    return_url: `${baseUrl}/account`,
   })
 
   redirect(session.url)
@@ -225,14 +235,16 @@ export async function createCheckoutSessionAction(priceId: string) {
   const userId = data.claims.sub as string
   const email = typeof data.claims.email === 'string' ? data.claims.email : undefined
 
+  const baseUrl = await getBaseUrl()
+
   let checkoutUrl: string | null = null
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer_email: email,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/dashboard?checkout=success`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/pricing`,
+      success_url: `${baseUrl}/dashboard?checkout=success`,
+      cancel_url: `${baseUrl}/pricing`,
       subscription_data: { metadata: { userId } },
       metadata: { userId },
     })
