@@ -5,6 +5,7 @@ import { Lock, ClipboardList } from 'lucide-react'
 import { Header } from '@/components/features/header'
 import { createClient } from '@/lib/supabase/server'
 import { getDecksByUserId } from '@/db/queries/decks'
+import { getCardCountsByDeckIds } from '@/db/queries/cards'
 import { getTaskCountByUserId, getTaskCountsByDeckIds } from '@/db/queries/tasks'
 import { Button } from '@/components/ui/button'
 import { DeckCard } from '@/components/features/decks/deck-card'
@@ -30,9 +31,13 @@ export default async function DashboardPage() {
     getTaskCountByUserId(userId),
   ])
 
-  const deckTaskCounts = userDecks.length > 0
-    ? await getTaskCountsByDeckIds(userId, userDecks.map((d) => d.id))
-    : {}
+  const deckIds = userDecks.map((d) => d.id)
+  const [deckTaskCounts, deckCardCounts] = userDecks.length > 0
+    ? await Promise.all([
+        getTaskCountsByDeckIds(userId, deckIds),
+        getCardCountsByDeckIds(userId, deckIds),
+      ])
+    : [{}, {}]
 
   const atLimit = !isPro && userDecks.length >= FREE_DECK_LIMIT
 
@@ -112,7 +117,7 @@ export default async function DashboardPage() {
 
               return (
                 <Link key={deck.id} href={`/deck/${deck.id}`}>
-                  <DeckCard deck={deck} taskCount={deckTaskCounts[deck.id] ?? 0} />
+                  <DeckCard deck={deck} taskCount={deckTaskCounts[deck.id] ?? 0} cardCount={deckCardCounts[deck.id] ?? 0} />
                 </Link>
               )
             })}

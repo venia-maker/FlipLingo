@@ -64,18 +64,19 @@ export function DeckContent({ deckId, isPro, initialCards, difficulty, hasDescri
       <div className="mt-8 rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         {/* Top row: Card count + study progress */}
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex size-14 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-700">
-              <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{initialCards.length}</span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-                {initialCards.length === 1 ? '1 Card' : `${initialCards.length} Cards`}
-              </span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+              {initialCards.length === 0
+                ? 'No cards yet'
+                : initialCards.length === 1
+                  ? '1 Card — Ready to study'
+                  : `${initialCards.length} Cards — Ready to study`}
+            </span>
+            {initialCards.length === 0 && (
               <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                {initialCards.length === 0 ? 'Add cards to get started' : 'Ready to study'}
+                Add cards to get started
               </span>
-            </div>
+            )}
           </div>
           <StudyButton deckId={deckId} cardCount={initialCards.length} />
         </div>

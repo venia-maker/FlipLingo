@@ -218,22 +218,32 @@ export async function createCheckoutSessionAction(priceId: string) {
     redirect('/auth/sign-up')
   }
 
+  if (!priceId) {
+    redirect('/pricing?error=checkout_failed')
+  }
+
   const userId = data.claims.sub as string
   const email = typeof data.claims.email === 'string' ? data.claims.email : undefined
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    customer_email: email,
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/dashboard?checkout=success`,
-    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/pricing`,
-    subscription_data: { metadata: { userId } },
-    metadata: { userId },
-  })
-
-  if (!session.url) {
-    throw new Error('Failed to create checkout session')
+  let checkoutUrl: string | null = null
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer_email: email,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/dashboard?checkout=success`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/pricing`,
+      subscription_data: { metadata: { userId } },
+      metadata: { userId },
+    })
+    checkoutUrl = session.url
+  } catch (e) {
+    console.error('[Stripe] Checkout session creation failed:', e)
   }
 
-  redirect(session.url)
+  if (!checkoutUrl) {
+    redirect('/pricing?error=checkout_failed')
+  }
+
+  redirect(checkoutUrl)
 }

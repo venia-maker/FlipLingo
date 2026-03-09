@@ -28,6 +28,7 @@ export default function RootLayout({
           {children}
           <Toaster
             position="top-right"
+            duration={4000}
             toastOptions={{
               style: {
                 background: 'var(--color-card)',

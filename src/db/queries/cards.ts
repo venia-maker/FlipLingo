@@ -1,8 +1,32 @@
 import { cache } from 'react'
-import { eq, and, asc, isNull, inArray } from 'drizzle-orm'
+import { eq, and, asc, isNull, inArray, count } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { cards, decks } from '@/db/schema'
+
+export const getCardCountsByDeckIds = cache(async (userId: string, deckIds: string[]): Promise<Record<string, number>> => {
+  if (deckIds.length === 0) return {}
+
+  const rows = await db.select({
+    deckId: cards.deckId,
+    count: count(),
+  }).from(cards)
+    .innerJoin(decks, eq(cards.deckId, decks.id))
+    .where(
+      and(
+        inArray(cards.deckId, deckIds),
+        eq(decks.userId, userId),
+        isNull(cards.deletedAt),
+      )
+    )
+    .groupBy(cards.deckId)
+
+  const result: Record<string, number> = {}
+  for (const row of rows) {
+    result[row.deckId] = row.count
+  }
+  return result
+})
 
 export const getCardsByDeckId = cache(async (deckId: string, userId: string) => {
   return db.select({

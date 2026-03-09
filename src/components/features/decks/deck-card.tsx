@@ -1,4 +1,4 @@
-import { ClipboardList } from 'lucide-react'
+import { ClipboardList, Layers } from 'lucide-react'
 import type { Difficulty } from '@/db/schema'
 
 interface DeckCardProps {
@@ -11,6 +11,7 @@ interface DeckCardProps {
     updatedAt: Date
   }
   taskCount?: number
+  cardCount?: number
 }
 
 const difficultyColors: Record<Difficulty, string> = {
@@ -20,7 +21,7 @@ const difficultyColors: Record<Difficulty, string> = {
   mixed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
 }
 
-export function DeckCard({ deck, taskCount = 0 }: DeckCardProps) {
+export function DeckCard({ deck, taskCount = 0, cardCount = 0 }: DeckCardProps) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
       <div className="flex items-start justify-between">
@@ -42,6 +43,10 @@ export function DeckCard({ deck, taskCount = 0 }: DeckCardProps) {
           {deck.description}
         </p>
       )}
+      <p className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+        <Layers className="size-3.5" />
+        {cardCount === 1 ? '1 card' : `${cardCount} cards`}
+      </p>
     </div>
   )
 }

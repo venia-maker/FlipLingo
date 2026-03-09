@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { UpgradeButton } from "@/components/features/pricing/upgrade-button";
 import { PricingBackButton } from "@/components/features/pricing/back-button";
+import { CheckoutError } from "@/components/features/pricing/checkout-error";
 import { getUserSubscriptionStatus } from "@/app/actions/stripe";
 
 const PLANS = [
@@ -60,6 +61,7 @@ export default async function PricingPage() {
       </div>
 
       <main className="flex flex-1 flex-col items-center justify-center px-4 pt-24 pb-16">
+        <CheckoutError />
         <div className="mb-12 w-full max-w-4xl">
           {user && (
             <div className="mb-6">
