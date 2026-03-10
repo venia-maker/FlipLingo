@@ -3,7 +3,7 @@ import type Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 
 import { stripe } from '@/lib/stripe'
-import { upsertSubscription, createSubscriptionHistoryEntry } from '@/db/queries/subscriptions'
+import { upsertSubscription, createSubscriptionHistoryEntry, deleteSubscriptionByUserId } from '@/db/queries/subscriptions'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? ''
 
@@ -97,11 +97,36 @@ export async function POST(request: Request) {
 
   switch (event.type) {
     case 'customer.subscription.created':
-    case 'customer.subscription.updated':
-    case 'customer.subscription.deleted': {
+    case 'customer.subscription.updated': {
       const subscription = event.data.object as Stripe.Subscription
       const eventType = event.type.replace('customer.subscription.', '')
       await syncSubscription(subscription, eventType)
+      break
+    }
+
+    case 'customer.subscription.deleted': {
+      const subscription = event.data.object as Stripe.Subscription
+      const userId = await resolveUserId(subscription)
+      if (userId) {
+        const item = subscription.items.data[0]
+        await createSubscriptionHistoryEntry({
+          userId,
+          eventType: 'deleted',
+          stripeSubscriptionId: subscription.id,
+          status: subscription.status,
+          priceId: item?.price?.id ?? null,
+          amount: item?.price?.unit_amount ?? null,
+          interval: item?.price?.recurring?.interval ?? null,
+          currentPeriodEnd: item?.current_period_end
+            ? new Date(item.current_period_end * 1000)
+            : null,
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          cancelAt: subscription.cancel_at
+            ? new Date(subscription.cancel_at * 1000)
+            : null,
+        })
+        await deleteSubscriptionByUserId(userId)
+      }
       break
     }
 

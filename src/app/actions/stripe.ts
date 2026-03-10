@@ -36,6 +36,14 @@ const NO_SUB: SubscriptionDetails = {
   interval: null,
 }
 
+const STRIPE_PRICE_PRO = process.env.STRIPE_PRICE_PRO ?? process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO ?? ''
+
+/** Check if a priceId corresponds to the Pro plan */
+function isProPlan(priceId: string | null): boolean {
+  if (!STRIPE_PRICE_PRO || !priceId) return false
+  return priceId === STRIPE_PRICE_PRO
+}
+
 /** Check if subscription has a pending cancellation (either via cancel_at_period_end or cancel_at) */
 function hasPendingCancellation(cancelAtPeriodEnd: boolean, cancelAt: Date | null): boolean {
   return cancelAtPeriodEnd || (cancelAt !== null && cancelAt > new Date())
@@ -54,10 +62,10 @@ export async function getUserSubscriptionStatus(email: string, userId?: string):
 
   if (!sub) return { isPro: false }
   const pendingCancel = hasPendingCancellation(sub.cancelAtPeriodEnd, sub.cancelAt)
-  const isPro = sub.status === 'active' || (
+  const isActiveOrCanceling = sub.status === 'active' || (
     pendingCancel && sub.currentPeriodEnd !== null && sub.currentPeriodEnd > new Date()
   )
-  return { isPro }
+  return { isPro: isProPlan(sub.priceId) && isActiveOrCanceling }
 }
 
 export async function getSubscriptionDetailsByUserId(userId: string): Promise<SubscriptionDetails> {
@@ -111,24 +119,37 @@ export async function getSubscriptionDetailsByUserId(userId: string): Promise<Su
         }),
       ])
 
+      // If subscription is fully canceled, clean up DB and return free state
+      if (stripeSub.status === 'canceled') {
+        await deleteSubscriptionByUserId(userId)
+        return NO_SUB
+      }
+
+      const priceId = item?.price?.id ?? null
       const pendingCancel = hasPendingCancellation(cancelAtPeriodEnd, cancelAt)
       const isActiveOrCanceling = stripeSub.status === 'active' || (
         pendingCancel && currentPeriodEnd !== null && currentPeriodEnd > new Date()
       )
 
       return {
-        isPro: isActiveOrCanceling,
+        isPro: isProPlan(priceId) && isActiveOrCanceling,
         status: stripeSub.status,
         currentPeriodEnd,
-        cancelAtPeriodEnd: pendingCancel,
+        cancelAtPeriodEnd: isProPlan(priceId) && pendingCancel,
         cancelAt,
-        priceId: item?.price?.id ?? null,
-        amount: item?.price?.unit_amount ? item.price.unit_amount / 100 : null,
+        priceId,
+        amount: item?.price?.unit_amount != null ? item.price.unit_amount / 100 : null,
         interval: item?.price?.recurring?.interval ?? null,
       }
     } catch {
       // Fall through to DB data if Stripe fetch fails
     }
+  }
+
+  // If subscription is fully canceled in DB, clean up
+  if (sub.status === 'canceled') {
+    await deleteSubscriptionByUserId(userId)
+    return NO_SUB
   }
 
   const pendingCancel = hasPendingCancellation(sub.cancelAtPeriodEnd, sub.cancelAt)
@@ -137,13 +158,13 @@ export async function getSubscriptionDetailsByUserId(userId: string): Promise<Su
   )
 
   return {
-    isPro: isActiveOrCanceling,
+    isPro: isProPlan(sub.priceId) && isActiveOrCanceling,
     status: sub.status,
     currentPeriodEnd: sub.currentPeriodEnd,
-    cancelAtPeriodEnd: pendingCancel,
+    cancelAtPeriodEnd: isProPlan(sub.priceId) && pendingCancel,
     cancelAt: sub.cancelAt,
     priceId: sub.priceId,
-    amount: sub.amount ? sub.amount / 100 : null,
+    amount: sub.amount != null ? sub.amount / 100 : null,
     interval: sub.interval,
   }
 }

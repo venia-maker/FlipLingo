@@ -171,24 +171,6 @@ export function StudySession({ deckId, deckTitle, cards }: StudySessionProps) {
         </p>
       </div>
 
-      {/* Progress bar */}
-      <div className="mb-6 flex w-full items-center gap-1.5">
-        {cards.map((c, i) => (
-          <div
-            key={c.id}
-            className={`h-1.5 flex-1 rounded-full transition-colors ${
-              results[i] === 'correct'
-                ? 'bg-green-500'
-                : results[i] === 'incorrect'
-                  ? 'bg-red-500'
-                  : i === currentIndex
-                    ? 'bg-zinc-400 dark:bg-zinc-500'
-                    : 'bg-zinc-200 dark:bg-zinc-800'
-            }`}
-          />
-        ))}
-      </div>
-
       {/* Flashcard */}
       <div
         className="w-full cursor-pointer [perspective:1000px]"

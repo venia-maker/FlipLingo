@@ -73,7 +73,7 @@ export function BillingTab({ subscription, upgradeUrl }: BillingTabProps) {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Amount</span>
                 <span className="text-sm font-medium">
-                  ${subscription.amount}/{subscription.interval}
+                  ${subscription.amount ?? 0}/{subscription.interval ?? 'month'}
                 </span>
               </div>
               <Separator />
