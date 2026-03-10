@@ -164,16 +164,6 @@ export default function Home() {
               </span>
             </div>
           </button>
-          <div className="mt-6 flex justify-center gap-1.5">
-            {SAMPLE_CARDS.map((_, i) => (
-              <span
-                key={i}
-                className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === cardIndex ? 'w-6 bg-emerald-500' : 'w-1.5 bg-zinc-300 dark:bg-zinc-700'
-                }`}
-              />
-            ))}
-          </div>
         </div>
       </section>
 
